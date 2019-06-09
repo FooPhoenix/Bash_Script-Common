@@ -12,7 +12,7 @@
 #	of others scripts.														   #
 #																			   #
 ################################################################################
-#														27.05.2019 - 27.05.2019
+#														27.05.2019 - 09.06.2019
 
 
 # Make Bash a bit more robust to bugs...
@@ -95,7 +95,16 @@ pipe_parent_process_id=''
 ################################################################################
 ################################################################################
 
-# ANSI CSI values
+function _getCSI
+{
+	local IFS=';'
+	local _type="${1}"; shift
+	local _parameters="${*}"
+
+	echo -n "\e[${_parameters}${_type}"
+}
+
+# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
 readonly _CSIM_BOLD='1'
 readonly _CSIM_DARK='2'
@@ -152,113 +161,244 @@ readonly _CSIM_BACKGROUND_WHITE='107'
 
 function getCSIm
 {
-	local IFS=';'
-	local _parameters="${*}"
-
-	echo -n "\e[${_parameters}m"
+	_getCSI 'm' "${@}"
 }
 
 # -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
-S_NO="$(getCSIm ${_CSIM_RESET_ALL})"	# NO > NORMAL
-S_BO="$(getCSIm ${_CSIM_BOLD})"
-S_DA="$(getCSIm ${_CSIM_DARK})"
-S_IT="$(getCSIm ${_CSIM_ITALIC})"
-S_UN="$(getCSIm ${_CSIM_UNDERLINE})"
-S_BL="$(getCSIm ${_CSIM_BLINK})"
-S_BA="$(getCSIm ${_CSIM_BARRED})"
+readonly S_NO="$(getCSIm ${_CSIM_RESET_ALL})"	# NO > NORMAL
+readonly S_BO="$(getCSIm ${_CSIM_BOLD})"
+readonly S_DA="$(getCSIm ${_CSIM_DARK})"
+readonly S_IT="$(getCSIm ${_CSIM_ITALIC})"
+readonly S_UN="$(getCSIm ${_CSIM_UNDERLINE})"
+readonly S_BL="$(getCSIm ${_CSIM_BLINK})"
+readonly S_BA="$(getCSIm ${_CSIM_BARRED})"
 
-S_R_AL="$(getCSIm ${_CSIM_RESET_ALL})"
-S_R_BO="$(getCSIm ${_CSIM_RESET_BOLD})"
-S_R_DA="$(getCSIm ${_CSIM_RESET_DARK})"
-S_R_IT="$(getCSIm ${_CSIM_RESET_ITALIC})"
-S_R_UN="$(getCSIm ${_CSIM_RESET_UNDERLINE})"
-S_R_BL="$(getCSIm ${_CSIM_RESET_BLINK})"
-S_R_BA="$(getCSIm ${_CSIM_RESET_BARRED})"
-S_R_CF="$(getCSIm ${_CSIM_RESET_COLORF})"
-S_R_CB="$(getCSIm ${_CSIM_RESET_COLORB})"
+readonly S_R_AL="$(getCSIm ${_CSIM_RESET_ALL})"
+readonly S_R_BO="$(getCSIm ${_CSIM_RESET_BOLD})"
+readonly S_R_DA="$(getCSIm ${_CSIM_RESET_DARK})"
+readonly S_R_IT="$(getCSIm ${_CSIM_RESET_ITALIC})"
+readonly S_R_UN="$(getCSIm ${_CSIM_RESET_UNDERLINE})"
+readonly S_R_BL="$(getCSIm ${_CSIM_RESET_BLINK})"
+readonly S_R_BA="$(getCSIm ${_CSIM_RESET_BARRED})"
+readonly S_R_CF="$(getCSIm ${_CSIM_RESET_COLORF})"
+readonly S_R_CB="$(getCSIm ${_CSIM_RESET_COLORB})"
 
 (( ${SCRIPT_DARKEN_BOLD:-1} == 1 )) &&
-	SCRIPT_DARKEN_BOLD="${S_DA}" ||
-	SCRIPT_DARKEN_BOLD=''
+	readonly SCRIPT_DARKEN_BOLD="${S_DA}" ||
+	readonly SCRIPT_DARKEN_BOLD=''
 
 # -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
 # FOREGROUND COLOR
-S_BLA="$(getCSIm ${_CSIM_FOREGROUND_BLACK})"
-S_RED="$(getCSIm ${_CSIM_FOREGROUND_RED})"
-S_GRE="$(getCSIm ${_CSIM_FOREGROUND_GREEN})"
-S_YEL="$(getCSIm ${_CSIM_FOREGROUND_YELLOW})"
-S_BLU="$(getCSIm ${_CSIM_FOREGROUND_BLUE})"
-S_MAG="$(getCSIm ${_CSIM_FOREGROUND_MAGENTA})"
-S_CYA="$(getCSIm ${_CSIM_FOREGROUND_CYAN})"
-S_LGR="$(getCSIm ${_CSIM_FOREGROUND_LIGHT_GRAY})"
-S_DGR="$(getCSIm ${_CSIM_FOREGROUND_DARK_GRAY})"
-S_LRE="$(getCSIm ${_CSIM_FOREGROUND_LIGHT_RED})"
-S_LGR="$(getCSIm ${_CSIM_FOREGROUND_LIGHT_GREEN})"
-S_LYE="$(getCSIm ${_CSIM_FOREGROUND_LIGHT_YELLOW})"
-S_LBL="$(getCSIm ${_CSIM_FOREGROUND_LIGHT_BLUE})"
-S_LMA="$(getCSIm ${_CSIM_FOREGROUND_LIGHT_MAGENTA})"
-S_LCY="$(getCSIm ${_CSIM_FOREGROUND_LIGHT_CYAN})"
-S_WHI="$(getCSIm ${_CSIM_FOREGROUND_WHITE})"
+readonly S_BLA="$(getCSIm ${_CSIM_FOREGROUND_BLACK})"
+readonly S_RED="$(getCSIm ${_CSIM_FOREGROUND_RED})"
+readonly S_GRE="$(getCSIm ${_CSIM_FOREGROUND_GREEN})"
+readonly S_YEL="$(getCSIm ${_CSIM_FOREGROUND_YELLOW})"
+readonly S_BLU="$(getCSIm ${_CSIM_FOREGROUND_BLUE})"
+readonly S_MAG="$(getCSIm ${_CSIM_FOREGROUND_MAGENTA})"
+readonly S_CYA="$(getCSIm ${_CSIM_FOREGROUND_CYAN})"
+readonly S_LGY="$(getCSIm ${_CSIM_FOREGROUND_LIGHT_GRAY})"
+readonly S_DGY="$(getCSIm ${_CSIM_FOREGROUND_DARK_GRAY})"
+readonly S_LRE="$(getCSIm ${_CSIM_FOREGROUND_LIGHT_RED})"
+readonly S_LGR="$(getCSIm ${_CSIM_FOREGROUND_LIGHT_GREEN})"
+readonly S_LYE="$(getCSIm ${_CSIM_FOREGROUND_LIGHT_YELLOW})"
+readonly S_LBL="$(getCSIm ${_CSIM_FOREGROUND_LIGHT_BLUE})"
+readonly S_LMA="$(getCSIm ${_CSIM_FOREGROUND_LIGHT_MAGENTA})"
+readonly S_LCY="$(getCSIm ${_CSIM_FOREGROUND_LIGHT_CYAN})"
+readonly S_WHI="$(getCSIm ${_CSIM_FOREGROUND_WHITE})"
 
 # BACKGROUND COLOR
-S_B_BLA="$(getCSIm ${_CSIM_BACKGROUND_BLACK})"
-S_B_RED="$(getCSIm ${_CSIM_BACKGROUND_RED})"
-S_B_GRE="$(getCSIm ${_CSIM_BACKGROUND_GREEN})"
-S_B_YEL="$(getCSIm ${_CSIM_BACKGROUND_YELLOW})"
-S_B_BLU="$(getCSIm ${_CSIM_BACKGROUND_BLUE})"
-S_B_MAG="$(getCSIm ${_CSIM_BACKGROUND_MAGENTA})"
-S_B_CYA="$(getCSIm ${_CSIM_BACKGROUND_CYAN})"
-S_B_LGR="$(getCSIm ${_CSIM_BACKGROUND_LIGHT_GRAY})"
-S_B_DGR="$(getCSIm ${_CSIM_BACKGROUND_DARK_GRAY})"
-S_B_LRE="$(getCSIm ${_CSIM_BACKGROUND_LIGHT_RED})"
-S_B_LGR="$(getCSIm ${_CSIM_BACKGROUND_LIGHT_GREEN})"
-S_B_LYE="$(getCSIm ${_CSIM_BACKGROUND_LIGHT_YELLOW})"
-S_B_LBL="$(getCSIm ${_CSIM_BACKGROUND_LIGHT_BLUE})"
-S_B_LMA="$(getCSIm ${_CSIM_BACKGROUND_LIGHT_MAGENTA})"
-S_B_LCY="$(getCSIm ${_CSIM_BACKGROUND_LIGHT_CYAN})"
-S_B_WHI="$(getCSIm ${_CSIM_BACKGROUND_WHITE})"
+readonly S_B_BLA="$(getCSIm ${_CSIM_BACKGROUND_BLACK})"
+readonly S_B_RED="$(getCSIm ${_CSIM_BACKGROUND_RED})"
+readonly S_B_GRE="$(getCSIm ${_CSIM_BACKGROUND_GREEN})"
+readonly S_B_YEL="$(getCSIm ${_CSIM_BACKGROUND_YELLOW})"
+readonly S_B_BLU="$(getCSIm ${_CSIM_BACKGROUND_BLUE})"
+readonly S_B_MAG="$(getCSIm ${_CSIM_BACKGROUND_MAGENTA})"
+readonly S_B_CYA="$(getCSIm ${_CSIM_BACKGROUND_CYAN})"
+readonly S_B_LGY="$(getCSIm ${_CSIM_BACKGROUND_LIGHT_GRAY})"
+readonly S_B_DGY="$(getCSIm ${_CSIM_BACKGROUND_DARK_GRAY})"
+readonly S_B_LRE="$(getCSIm ${_CSIM_BACKGROUND_LIGHT_RED})"
+readonly S_B_LGR="$(getCSIm ${_CSIM_BACKGROUND_LIGHT_GREEN})"
+readonly S_B_LYE="$(getCSIm ${_CSIM_BACKGROUND_LIGHT_YELLOW})"
+readonly S_B_LBL="$(getCSIm ${_CSIM_BACKGROUND_LIGHT_BLUE})"
+readonly S_B_LMA="$(getCSIm ${_CSIM_BACKGROUND_LIGHT_MAGENTA})"
+readonly S_B_LCY="$(getCSIm ${_CSIM_BACKGROUND_LIGHT_CYAN})"
+readonly S_B_WHI="$(getCSIm ${_CSIM_BACKGROUND_WHITE})"
 
 # -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
 # NORMAL + FOREGROUND COLOR
-S_NOBLA="$(getCSIm ${_CSIM_RESET_ALL} ${_CSIM_FOREGROUND_BLACK})"
-S_NORED="$(getCSIm ${_CSIM_RESET_ALL} ${_CSIM_FOREGROUND_RED})"
-S_NOGRE="$(getCSIm ${_CSIM_RESET_ALL} ${_CSIM_FOREGROUND_GREEN})"
-S_NOYEL="$(getCSIm ${_CSIM_RESET_ALL} ${_CSIM_FOREGROUND_YELLOW})"
-S_NOBLU="$(getCSIm ${_CSIM_RESET_ALL} ${_CSIM_FOREGROUND_BLUE})"
-S_NOMAG="$(getCSIm ${_CSIM_RESET_ALL} ${_CSIM_FOREGROUND_MAGENTA})"
-S_NOCYA="$(getCSIm ${_CSIM_RESET_ALL} ${_CSIM_FOREGROUND_CYAN})"
-S_NOLGR="$(getCSIm ${_CSIM_RESET_ALL} ${_CSIM_FOREGROUND_LIGHT_GRAY})"
-S_NODGR="$(getCSIm ${_CSIM_RESET_ALL} ${_CSIM_FOREGROUND_DARK_GRAY})"
-S_NOLRE="$(getCSIm ${_CSIM_RESET_ALL} ${_CSIM_FOREGROUND_LIGHT_RED})"
-S_NOLGR="$(getCSIm ${_CSIM_RESET_ALL} ${_CSIM_FOREGROUND_LIGHT_GREEN})"
-S_NOLYE="$(getCSIm ${_CSIM_RESET_ALL} ${_CSIM_FOREGROUND_LIGHT_YELLOW})"
-S_NOLBL="$(getCSIm ${_CSIM_RESET_ALL} ${_CSIM_FOREGROUND_LIGHT_BLUE})"
-S_NOLMA="$(getCSIm ${_CSIM_RESET_ALL} ${_CSIM_FOREGROUND_LIGHT_MAGENTA})"
-S_NOLCY="$(getCSIm ${_CSIM_RESET_ALL} ${_CSIM_FOREGROUND_LIGHT_CYAN})"
-S_NOWHI="$(getCSIm ${_CSIM_RESET_ALL} ${_CSIM_FOREGROUND_WHITE})"
+readonly S_NOBLA="$(getCSIm ${_CSIM_RESET_ALL} ${_CSIM_FOREGROUND_BLACK})"
+readonly S_NORED="$(getCSIm ${_CSIM_RESET_ALL} ${_CSIM_FOREGROUND_RED})"
+readonly S_NOGRE="$(getCSIm ${_CSIM_RESET_ALL} ${_CSIM_FOREGROUND_GREEN})"
+readonly S_NOYEL="$(getCSIm ${_CSIM_RESET_ALL} ${_CSIM_FOREGROUND_YELLOW})"
+readonly S_NOBLU="$(getCSIm ${_CSIM_RESET_ALL} ${_CSIM_FOREGROUND_BLUE})"
+readonly S_NOMAG="$(getCSIm ${_CSIM_RESET_ALL} ${_CSIM_FOREGROUND_MAGENTA})"
+readonly S_NOCYA="$(getCSIm ${_CSIM_RESET_ALL} ${_CSIM_FOREGROUND_CYAN})"
+readonly S_NOLGY="$(getCSIm ${_CSIM_RESET_ALL} ${_CSIM_FOREGROUND_LIGHT_GRAY})"
+readonly S_NODGY="$(getCSIm ${_CSIM_RESET_ALL} ${_CSIM_FOREGROUND_DARK_GRAY})"
+readonly S_NOLRE="$(getCSIm ${_CSIM_RESET_ALL} ${_CSIM_FOREGROUND_LIGHT_RED})"
+readonly S_NOLGR="$(getCSIm ${_CSIM_RESET_ALL} ${_CSIM_FOREGROUND_LIGHT_GREEN})"
+readonly S_NOLYE="$(getCSIm ${_CSIM_RESET_ALL} ${_CSIM_FOREGROUND_LIGHT_YELLOW})"
+readonly S_NOLBL="$(getCSIm ${_CSIM_RESET_ALL} ${_CSIM_FOREGROUND_LIGHT_BLUE})"
+readonly S_NOLMA="$(getCSIm ${_CSIM_RESET_ALL} ${_CSIM_FOREGROUND_LIGHT_MAGENTA})"
+readonly S_NOLCY="$(getCSIm ${_CSIM_RESET_ALL} ${_CSIM_FOREGROUND_LIGHT_CYAN})"
+readonly S_NOWHI="$(getCSIm ${_CSIM_RESET_ALL} ${_CSIM_FOREGROUND_WHITE})"
 
 # -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
 # BOLD + FOREGROUND COLOR
-S_BOBLA="${SCRIPT_DARKEN_BOLD}$(getCSIm ${_CSIM_BOLD} ${_CSIM_FOREGROUND_BLACK})"
-S_BORED="${SCRIPT_DARKEN_BOLD}$(getCSIm ${_CSIM_BOLD} ${_CSIM_FOREGROUND_RED})"
-S_BOGRE="${SCRIPT_DARKEN_BOLD}$(getCSIm ${_CSIM_BOLD} ${_CSIM_FOREGROUND_GREEN})"
-S_BOYEL="${SCRIPT_DARKEN_BOLD}$(getCSIm ${_CSIM_BOLD} ${_CSIM_FOREGROUND_YELLOW})"
-S_BOBLU="${SCRIPT_DARKEN_BOLD}$(getCSIm ${_CSIM_BOLD} ${_CSIM_FOREGROUND_BLUE})"
-S_BOMAG="${SCRIPT_DARKEN_BOLD}$(getCSIm ${_CSIM_BOLD} ${_CSIM_FOREGROUND_MAGENTA})"
-S_BOCYA="${SCRIPT_DARKEN_BOLD}$(getCSIm ${_CSIM_BOLD} ${_CSIM_FOREGROUND_CYAN})"
-S_BOLGR="${SCRIPT_DARKEN_BOLD}$(getCSIm ${_CSIM_BOLD} ${_CSIM_FOREGROUND_LIGHT_GRAY})"
-S_BODGR="${SCRIPT_DARKEN_BOLD}$(getCSIm ${_CSIM_BOLD} ${_CSIM_FOREGROUND_DARK_GRAY})"
-S_BOLRE="${SCRIPT_DARKEN_BOLD}$(getCSIm ${_CSIM_BOLD} ${_CSIM_FOREGROUND_LIGHT_RED})"
-S_BOLGR="${SCRIPT_DARKEN_BOLD}$(getCSIm ${_CSIM_BOLD} ${_CSIM_FOREGROUND_LIGHT_GREEN})"
-S_BOLYE="${SCRIPT_DARKEN_BOLD}$(getCSIm ${_CSIM_BOLD} ${_CSIM_FOREGROUND_LIGHT_YELLOW})"
-S_BOLBL="${SCRIPT_DARKEN_BOLD}$(getCSIm ${_CSIM_BOLD} ${_CSIM_FOREGROUND_LIGHT_BLUE})"
-S_BOLMA="${SCRIPT_DARKEN_BOLD}$(getCSIm ${_CSIM_BOLD} ${_CSIM_FOREGROUND_LIGHT_MAGENTA})"
-S_BOLCY="${SCRIPT_DARKEN_BOLD}$(getCSIm ${_CSIM_BOLD} ${_CSIM_FOREGROUND_LIGHT_CYAN})"
-S_BOWHI="${SCRIPT_DARKEN_BOLD}$(getCSIm ${_CSIM_BOLD} ${_CSIM_FOREGROUND_WHITE})"
+readonly S_BOBLA="${SCRIPT_DARKEN_BOLD}$(getCSIm ${_CSIM_BOLD} ${_CSIM_FOREGROUND_BLACK})"
+readonly S_BORED="${SCRIPT_DARKEN_BOLD}$(getCSIm ${_CSIM_BOLD} ${_CSIM_FOREGROUND_RED})"
+readonly S_BOGRE="${SCRIPT_DARKEN_BOLD}$(getCSIm ${_CSIM_BOLD} ${_CSIM_FOREGROUND_GREEN})"
+readonly S_BOYEL="${SCRIPT_DARKEN_BOLD}$(getCSIm ${_CSIM_BOLD} ${_CSIM_FOREGROUND_YELLOW})"
+readonly S_BOBLU="${SCRIPT_DARKEN_BOLD}$(getCSIm ${_CSIM_BOLD} ${_CSIM_FOREGROUND_BLUE})"
+readonly S_BOMAG="${SCRIPT_DARKEN_BOLD}$(getCSIm ${_CSIM_BOLD} ${_CSIM_FOREGROUND_MAGENTA})"
+readonly S_BOCYA="${SCRIPT_DARKEN_BOLD}$(getCSIm ${_CSIM_BOLD} ${_CSIM_FOREGROUND_CYAN})"
+readonly S_BOLGY="${SCRIPT_DARKEN_BOLD}$(getCSIm ${_CSIM_BOLD} ${_CSIM_FOREGROUND_LIGHT_GRAY})"
+readonly S_BODGY="${SCRIPT_DARKEN_BOLD}$(getCSIm ${_CSIM_BOLD} ${_CSIM_FOREGROUND_DARK_GRAY})"
+readonly S_BOLRE="${SCRIPT_DARKEN_BOLD}$(getCSIm ${_CSIM_BOLD} ${_CSIM_FOREGROUND_LIGHT_RED})"
+readonly S_BOLGR="${SCRIPT_DARKEN_BOLD}$(getCSIm ${_CSIM_BOLD} ${_CSIM_FOREGROUND_LIGHT_GREEN})"
+readonly S_BOLYE="${SCRIPT_DARKEN_BOLD}$(getCSIm ${_CSIM_BOLD} ${_CSIM_FOREGROUND_LIGHT_YELLOW})"
+readonly S_BOLBL="${SCRIPT_DARKEN_BOLD}$(getCSIm ${_CSIM_BOLD} ${_CSIM_FOREGROUND_LIGHT_BLUE})"
+readonly S_BOLMA="${SCRIPT_DARKEN_BOLD}$(getCSIm ${_CSIM_BOLD} ${_CSIM_FOREGROUND_LIGHT_MAGENTA})"
+readonly S_BOLCY="${SCRIPT_DARKEN_BOLD}$(getCSIm ${_CSIM_BOLD} ${_CSIM_FOREGROUND_LIGHT_CYAN})"
+readonly S_BOWHI="${SCRIPT_DARKEN_BOLD}$(getCSIm ${_CSIM_BOLD} ${_CSIM_FOREGROUND_WHITE})"
+
+# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+
+function getCSI_RGB
+{
+	local R="${1:?unbound variable: function getCSI_RGB need red, green and blue values !}"
+	local G="${2:?unbound variable: function getCSI_RGB need red, green and blue values !}"
+	local B="${3:?unbound variable: function getCSI_RGB need red, green and blue values !}"
+
+	local D="${4:-}"
+
+	[[ "$D" == 'B' ]] && D='48' || D='38'
+
+	local _regex='^[0-5]$'
+
+	[[ "$R" =~ $_regex ]] || R=5
+	[[ "$G" =~ $_regex ]] || G=5
+	[[ "$B" =~ $_regex ]] || B=5
+
+	local _color=$(( 16 + ((R * 36) + (G * 6) + B) ))
+
+	getCSIm $D 5 $_color
+}
+
+function getCSI_GRAY
+{
+	local G="$1"
+
+	local D="${2:-}"
+
+	[[ "$D" == 'B' ]] && D='48' || D='38'
+
+	local _regex='^[1-9]?[0-9]$'
+
+	[[ "$G" =~ $_regex ]] || G='12'
+	(( G > 23 )) && G='23'
+
+	local _color=$(( 232 + G ))
+
+	getCSIm $D 5 $_color
+}
+
+function showRGB_Palette
+{
+	local R G B F _index
+
+	echo -e "${S_NO}"
+
+	for R in {0..5}; do
+		for G in {0..5}; do
+			echo -e "${S_NO}"
+
+			(( G < 3 )) && F='23' || F='0'
+
+			for B in {0..5}; do
+				echo -en "$(getCSI_GRAY $F)$(getCSI_RGB $R $G $B B)   $R-$G-$B   "
+			done
+		done
+	done
+
+	echo -e "${S_NO}"
+
+	_index=0
+	for G in {0..23}; do
+		(( _index < 12 )) && F='23' || F='0'
+
+		echo -en "$(getCSI_GRAY $F)$(getCSI_GRAY $G B)    $(printf '%3s' $_index)    "
+		(( ++_index % 6 == 0 )) && echo -e "${S_NO}"
+	done
+}
+
+# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+
+function getCSI_CursorMove
+{
+	# Possible direction :
+	#		Left, Right =				Move the cursor from their current location to the direction by ${2} characters.
+	#		Up, Down =					Move the cursor from their current location to the direction by ${2} lines.
+	#		Column =					Move the cursor to the ${2} column of the current line.
+	#		Position =					Move the cursor to the ${2} line and the ${3} column.
+
+	local _direction="${1:?unbound variable: function getCSI_CursorMove need a direction...}"
+	local _number1="${2:-}"
+	local _number2="${3:-}"
+
+	_direction="${_direction:0:1}"
+
+	_direction="$( echo "${_direction^^}" | tr 'PCUDRL' 'HGABCD' )"
+	[[ "$_number1" != '' ]] && (( _number1 )) # if _number1 is not empty then if _number1 == 0 or is not a number raise an error, otherwith continue
+	[[ 'HGABCD' == *${_direction}* ]] || errcho ':EXIT:' 'function getCSI_CursorMove need a valid direction...'
+
+	[[ "${_direction}" == 'H' ]] &&	[[ "$_number2" != '' ]] &&
+		{
+			(( _number2 ))
+			_getCSI "${_direction}" "${_number1}" "${_number2}"
+			return 0
+		}
+
+	_getCSI "${_direction}" "${_number1}"
+}
+
+# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+
+readonly CO_HIDE="$(_getCSI 'l' '?25')"
+readonly CO_SHOW="$(_getCSI 'h' '?25')"
+
+readonly CO_SAVE_POS="$(_getCSI 's')"
+readonly CO_RESTORE_POS="$(_getCSI 'u')"
+
+# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+
+readonly ES_CURSOR_TO_SCREEN_END="$(_getCSI 'J' '0')"
+readonly ES_CURSOR_TO_SCREEN_START="$(_getCSI 'J' '1')"
+readonly ES_ENTIRE_SCREEN="$(_getCSI 'J' '2')"
+
+readonly ES_CURSOR_TO_LINE_END="$(_getCSI 'K' '0')"
+readonly ES_CURSOR_TO_LINE_START="$(_getCSI 'K' '1')"
+readonly ES_ENTIRE_LINE="$(_getCSI 'K' '2')"
+
+# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+
+function getCSI_ScreenMove
+{
+	local _direction="${1:?unbound variable: function getCSI_ScreenMove need a direction...}"
+	local _number="${2:-}"
+
+	_direction="${_direction:0:1}"
+
+	_direction="$( echo "${_direction^^}" | tr 'UDIR' 'STLM' )"
+	[[ "$_number" != '' ]] && (( _number )) # if _number1 is not empty then if _number1 == 0 or is not a number raise an error, otherwith continue
+	[[ 'STLM' == *${_direction}* ]] || errcho ':EXIT:' 'function getCSI_ScreenMove need a valid direction...'
+
+	_getCSI "${_direction}" "${_number}"
+}
 
 
 
@@ -554,8 +694,6 @@ function _showExitHeader
 	local _exit_tag="${1:-NO}"
 	local _exit_reason="${2:-}"
 
-	echo
-
 	[[ "$_exit_tag" == 'NO' ]] && return 0
 
 	local _crash_time _crash_after
@@ -563,6 +701,7 @@ function _showExitHeader
 	printf -v _crash_time '%(%A %-d %B %Y @ %X)T' -1
 	TZ=UTC printf -v _crash_after '%(%X)T' $SECONDS
 
+	echo
 	echo -en "\r\e[0J"									########### TODO e[0J ???
 	echo -e "${_exit_tag} ${_exit_reason}"
 	echo -e "This has happened at ${S_NOWHI}${_crash_time}${S_NO}, after the script has run for ${S_NOWHI}${_crash_after}${S_NO}..."
@@ -718,6 +857,13 @@ function getFileTypeV
 
 
 
+################################################################################
+################################################################################
+####                                                                        ####
+####     Debug functions                                                    ####
+####                                                                        ####
+################################################################################
+################################################################################
 
 function processTimeResultsV
 {
@@ -849,9 +995,36 @@ exec {stderr_pipe}<>"$SCRIPT_STDERR_PIPE" {stderr_backup}>&2 2>&${stderr_pipe}
 		[[ -z "$message" ]] && continue
 		checkLoopEnd "$message" && break
 
-		printf '[%(%X)T] %s\n' -1 "$message" >&${stderr_file}
+		printf -v current_time '%(%X)T' -1
+		TZ=UTC printf -v elapsed_time '%(%X)T' $SECONDS
+		printf '[%s - %s] %s\n' "$current_time" "$elapsed_time" "$message" >&${stderr_file}
 	done
 
 	exec {stderr_pipe}<&-
 	exec {stderr_file}<&-
 } &
+
+
+
+################################################################################
+################################################################################
+
+
+
+function __change_log__
+{
+	: << 'COMMENT'
+
+	09.06.2019
+		Add a more generic function to create CSI ANSI codes.
+		Add some functions and constants for ANSI cursor and screen manipulation.
+		Removed an echoed empty line when the script finish normally without any message.
+
+	04.06.2019
+		Add a dummy function __change_log__ to write some... change log ;)
+		Add some functions for ANSI colors managements.
+		Add the elapsed time since the script start in the stderr log file.
+		Fix some ANSI colors constants names conflicts between S_LGR(ay) and S_LGR(een) and others.
+
+COMMENT
+}
