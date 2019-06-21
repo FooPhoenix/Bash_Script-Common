@@ -12,7 +12,7 @@
 #	of others scripts.														   #
 #																			   #
 ################################################################################
-#														27.05.2019 - 09.06.2019
+#														27.05.2019 - 18.06.2019
 
 
 # Make Bash a bit more robust to bugs...
@@ -35,11 +35,8 @@ readonly SCRIPT_REAL_PATH="$(readlink -qsf "${0}")"
 
 readonly SCRIPT_PID="$BASHPID"		# Store the BASHPID value is usefull to give it to a subshell, since use BASHPID don't
 									# expand to the good PID inside the subshell itself, and the BASHPPID don't exist...
-readonly SCRIPT_END_TAG=':END:'		# Used in pipes to say to a loop it can exit.
 
 readonly SCRIPT_WINDOWED_STDERR="${SCRIPT_WINDOWED_STDERR:-0}"
-
-readonly SCRIPT_ACTION_TAG_SIZE=12
 
 # -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
@@ -48,7 +45,8 @@ readonly TIMEFORMAT='%R-%U-%S' 	# Reserved Bash constant to choose the format of
 
 # -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
-readonly PATH_LOG='/var/log'
+readonly PATH_LOG='/var/log/userlog'
+readonly PATH_LOCK='/run/lock'
 readonly PATH_RAM_DISK='/dev/shm'
 readonly PATH_TMP="$(mktemp --tmpdir -d "${SCRIPT_NAME%.sh}-XXXXXXXX.tmp")"
 
@@ -59,8 +57,15 @@ readonly PATH_INFRASTRUCTURES="${PATH_INFRASTRUCTURES:-/media/foophoenix/AppKDE/
 
 # -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
-readonly SPACE_PADDING='                                                                                                                                                                                                                                                               '
-readonly ZERO_PADDING='00000000000000000000'
+readonly PADDING_SPACE='                                                                                                                                                                                                                                                               '
+readonly PADDING_ZERO='00000000000000000000'
+
+readonly ACTION_TAG_SIZE=12
+
+readonly LOOP_END_TAG=':END:'		# Used in pipes to say to a loop it can exit.
+
+readonly FILENAME_FORBIDEN_CHARS="[;\":/\\*?|<>$(echo -en "$(printf '\\x%x' {1..31})")]"
+readonly FILENAME_FORBIDEN_NAMES='^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\..*)?$'
 
 # -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
@@ -83,8 +88,75 @@ post_script_remove_files=( "$PATH_TMP" )
 
 pipe_expected_end=1
 pipe_received_end=0
-pipe_parent_process_id=''
+pipe_parent_process_id="$SCRIPT_PID"
 
+
+
+################################################################################
+################################################################################
+####                                                                        ####
+####     Arrays management functions                                        ####
+####                                                                        ####
+################################################################################
+################################################################################
+
+function removeArrayItem
+{
+	local __array_name="${1:?unbound variable: function removeArrayItem need a array name !}"
+	local _remove_gaps="${2:?unbound variable: function removeArrayItem need to know if you want to remove gaps !}"
+	shift; shift
+	local __items_to_remove=( "${@}" )
+
+	[[ "$_remove_gaps" =~ [01] ]] || errcho ':EXIT:' 'function removeArrayItem need the second parameter to be 0 or 1 (remove gaps)'
+	(( ${#__items_to_remove[@]} == 0 )) && return 0
+
+	local _item_to_remove _array_item_key _source_code
+
+	{
+		read -rd '' _source_code <<-SOURCE_CODE
+			for _item_to_remove in "\${__items_to_remove[@]}"; do
+				for _array_item_key in "\${!${__array_name}[@]}"; do
+					[[ "\${${__array_name}[\$_array_item_key]}" == "\$_item_to_remove" ]] && unset "${__array_name}[\$_array_item_key]"
+				done
+			done
+			(( _remove_gaps == 1 )) && ${__array_name}=( "\${${__array_name}[@]}" )
+			:
+		SOURCE_CODE
+	} || :
+
+	eval "$_source_code"
+}
+
+function removeArrayDuplicate
+{
+	local _array_name="${1:?unbound variable: function removeArrayDuplicate need a array name !}"
+	local _remove_gaps="${2:?unbound variable: function removeArrayDuplicate need to know if you want to remove gaps !}"
+	shift; shift
+	local _items_to_remove=( "${@}" )
+
+	[[ "$_remove_gaps" =~ [01] ]] || errcho ':EXIT:' 'function removeArrayDuplicate need the second parameter to be 0 or 1 (remove gaps)'
+	(( ${#_items_to_remove[@]} == 0 )) && eval "_items_to_remove=( \"\${${_array_name}[@]}\" )"
+
+	local _item_to_remove _array_item_key _source_code _item_count
+
+	{
+		read -rd '' _source_code <<-SOURCE_CODE
+			while (( \${#_items_to_remove[@]} > 0 )); do
+				_item_to_remove="\${_items_to_remove[0]}"
+				removeArrayItem _items_to_remove 1 "\$_item_to_remove"
+
+				_item_count=0
+				for _array_item_key in "\${!${_array_name}[@]}"; do
+					[[ "\${${_array_name}[\$_array_item_key]}" == "\$_item_to_remove" ]] && (( ++_item_count > 1 )) && unset "${_array_name}[\$_array_item_key]"
+				done
+			done
+			(( _remove_gaps == 1 )) && ${_array_name}=( "\${${_array_name}[@]}" )
+			:
+		SOURCE_CODE
+	} || :
+
+	eval "$_source_code"
+}
 
 
 ################################################################################
@@ -97,8 +169,8 @@ pipe_parent_process_id=''
 
 function _getCSI
 {
-	local IFS=';'
 	local _type="${1}"; shift
+	local IFS=';'
 	local _parameters="${*}"
 
 	echo -n "\e[${_parameters}${_type}"
@@ -417,11 +489,11 @@ function getActionTag
 
 	local _tag_name_size1 _tag_name_size2
 
-	((	_tag_name_size1 = SCRIPT_ACTION_TAG_SIZE - ${#_tag_name},
+	((	_tag_name_size1 = ACTION_TAG_SIZE - ${#_tag_name},
 		_tag_name_size2 = (_tag_name_size1 / 2) + (_tag_name_size1 % 2),
 		_tag_name_size1 = (_tag_name_size1 / 2)		))
 
-	echo "${S_NOWHI}[${_tag_color}${SPACE_PADDING:0:$_tag_name_size1}${_tag_name}${SPACE_PADDING:0:$_tag_name_size2}${S_NOWHI}]${S_R_AL}"
+	echo "${S_NOWHI}[${_tag_color}${PADDING_SPACE:0:$_tag_name_size1}${_tag_name}${PADDING_SPACE:0:$_tag_name_size2}${S_NOWHI}]${S_R_AL}"
 }
 
 readonly A_IN_PROGRESS="$(getActionTag 'IN PROGRESS' "$S_NO")"
@@ -455,7 +527,7 @@ readonly A_EXCLUDED_R="$(getActionTag 'EXCLUDED' "$S_RED")"
 readonly A_BACKUPED_G="$(getActionTag 'BACKUPED' "$S_GRE")"
 
 readonly A_EMPTY_TAG="$(getActionTag '  ' "$S_NO")"
-readonly A_TAG_LENGTH_SIZE="${SPACE_PADDING:0:$(( SCRIPT_ACTION_TAG_SIZE + 2 ))}"
+readonly A_TAG_LENGTH_SIZE="${PADDING_SPACE:0:$(( ACTION_TAG_SIZE + 2 ))}"
 
 
 
@@ -490,11 +562,12 @@ function errcho
 	local _regex="^:EXIT:([0-9]+)?$"
 
 	# Check here if the function has received an :EXIT: tag.
-	if [[ "${1:?unbound variable: errcho need at least one parameter !}" =~ $_regex ]]; then
+	[[ "${1:?unbound variable: errcho need at least one parameter !}" =~ $_regex ]] &&
+	{
 		_need_exit=${BASH_REMATCH[1]:-1} 		# If BASH_REMATCH[1] is empty or unset, force it to be 1
 		_need_exit=$(( _need_exit == 0 ? 1 : _need_exit )) 		# :EXIT:0 has no sense after an error, force it to be :EXIT:1
 		shift
-	fi
+	}
 
 	echo "$_source: line $_line: ${@}" >&2
 
@@ -508,9 +581,9 @@ function checkLoopFail
 	# The loop exit immediately if the parent shell unexpectedly exit.
 	# This is a anti infinite loop security.
 
-	local _related_pid="${1:-$SCRIPT_PID}"
+	local _related_pid="${pipe_parent_process_id}"
 
-	(( $(ps -p $_related_pid -ho pid || echo 0) != $_related_pid )) && return 1
+	(( $(ps -p $_related_pid -ho pid || echo 0) != _related_pid )) && return 1
 
 	sleep 0.5
 	return 0
@@ -520,9 +593,9 @@ function checkLoopEnd
 {
 	# This function check if a loop in a subshell need to exit or not.
 	#
-	# The loop exit normally if a SCRIPT_END_TAG is received via a pipe.
+	# The loop exit normally if a LOOP_END_TAG is received via a pipe.
 
-	[[ "${1:?unbound variable: function checkLoopEnd has a mendatory argument !}" == "$SCRIPT_END_TAG" ]] &&
+	[[ "${1:?unbound variable: function checkLoopEnd has a mendatory argument !}" == "$LOOP_END_TAG" ]] &&
 		(( ++pipe_received_end, pipe_received_end >= pipe_expected_end )) && return 0
 
 	return 1
@@ -555,9 +628,7 @@ function getProcessTree()
 		_pid=${_ppids[$_pid]} # retreive the ppid of the current pid
 		_children[$_pid]=1
 		_relationship[$_pid]=1
-		if (( _pid == 1 )); then
-			break
-		fi
+		(( _pid == 1 )) && break
 	done
 
 	local _index _check_pid _children_pids
@@ -569,18 +640,17 @@ function getProcessTree()
 	_index=0
 	while (( _index < ${#_children_pids[@]} )); do
 		_pid=${_children_pids[$_index]}
-		if (( _pid != 0 )); then
-			for _check_pid in ${!_ppids[@]}; do # ${!_ppids[@]} return the list of all pid because each ppid has their own pid as key
-				if (( _pid == _ppids[_check_pid] )); then
-					_pids+=( $_check_pid ) # add the current checked pid
-					_relationship[$_check_pid]=3
-					_children[$_check_pid]=0
-					(( ++_children[_pid] )) # add one children
-					_children_pids+=( $_check_pid ) # add this pid to be evaluated later
-				fi
-			done
-		fi
-		(( ++_index ))
+		(( ++_index, _pid == 0 )) && continue
+
+		for _check_pid in ${!_ppids[@]}; do # ${!_ppids[@]} return the list of all pid because each ppid has their own pid as key
+			(( _pid != _ppids[_check_pid] )) && continue
+
+			_pids+=( $_check_pid ) # add the current checked pid
+			_relationship[$_check_pid]=3
+			_children[$_check_pid]=0
+			(( ++_children[_pid] )) # add one children
+			_children_pids+=( $_check_pid ) # add this pid to be evaluated later
+		done
 	done
 
 	#---------------------------------------------------------------------------
@@ -593,20 +663,18 @@ function getProcessTree()
 	_index=0
 	while (( _index < ${#_children_pids[@]} )); do
 		_pid=${_children_pids[$_index]}
-		if (( _pid != 0 )); then
-			for _check_pid in ${!_ppids[@]}; do # ${!_ppids[@]} return the list of all pid because each ppid has their own pid as key
-				if (( _pid == _ppids[_check_pid] )); then
-					if (( _relationship[_check_pid] == 0 )); then # if _relationship[_check_pid] is not 0, so this pid is already in the list, just do nothing
-						_pids+=( $_check_pid ) # add the current checked pid
-						_relationship[$_check_pid]=0
-						_children[$_check_pid]=${_children[$_check_pid]:-0}
-						(( ++_children[_pid] )) # add one children
-					fi
-					_children_pids+=( $_check_pid ) # add this pid to be evaluated later
-				fi
-			done
-		fi
-		(( ++_index ))
+		(( ++_index, _pid == 0 )) && continue
+
+		for _check_pid in ${!_ppids[@]}; do # ${!_ppids[@]} return the list of all pid because each ppid has their own pid as key
+			(( _pid != _ppids[_check_pid] )) && continue
+
+			_children_pids+=( $_check_pid ) # add this pid to be evaluated later
+			(( _relationship[_check_pid] != 0 )) && continue  # if _relationship[_check_pid] is not 0, so this pid is already in the list, just do nothing
+			_pids+=( $_check_pid ) # add the current checked pid
+			_relationship[$_check_pid]=0
+			_children[$_check_pid]=${_children[$_check_pid]:-0}
+			(( ++_children[_pid] )) # add one children
+		done
 	done
 
 	#---------------------------------------------------------------------------
@@ -617,6 +685,8 @@ function getProcessTree()
 	#---------------------------------------------------------------------------
 
 	local _level _output='' _screen_size=$(( $(tput cols) - 6 ))
+	local S_DAYEL="$(getCSIm ${_CSIM_DARK} ${_CSIM_FOREGROUND_YELLOW})"
+
 
 	_children_pids=( ${_pids[0]} )
 	_index=0
@@ -631,10 +701,10 @@ function getProcessTree()
 		_children[$_check_pid]=$(( _children[$_check_pid] - 1 ))
 
 		for _check_pid in ${_pids[@]}; do
-			if (( _pid == _ppids[_check_pid] )); then
-				_children_pids+=( $_check_pid )
-				_index=$(( _index + 1 ))
-			fi
+			(( _pid != _ppids[_check_pid] )) && continue
+
+			_children_pids+=( $_check_pid )
+			_index=$(( _index + 1 ))
 		done
 
 		_command=''
@@ -643,23 +713,19 @@ function getProcessTree()
 		_level=0
 		while (( 1 )); do
 			_check_pid=${_ppids[$_check_pid]}
-			if (( _check_pid == 1 )); then
-				break
-			fi
-			if (( _children[_check_pid] > 0 )); then
-				if (( _level == 0 )); then
+			(( _check_pid == 1 )) && break
+
+			(( _level++ == 0 )) &&
+			{
+				(( _children[_check_pid] > 0 )) &&
+					_command="+-$_command" ||
 					_command="+-$_command"
-				else
-					_command="| $_command"
-				fi
-			else
-				if (( _level == 0 )); then
-					_command="+-$_command"
-				else
+			} ||
+			{
+				(( _children[_check_pid] > 0 )) &&
+					_command="| $_command" ||
 					_command="  $_command"
-				fi
-			fi
-			(( ++_level ))
+			}
 		done
 
 		(( _level = _screen_size - ((_level * 2) + 4) ))
@@ -668,11 +734,11 @@ function getProcessTree()
 			0)
 				_command="${_command}??? ${_commands[$_pid]:0:$_level}"	;;
 			1)
-				_command="${_command}\e[2;33m?\e[0m?? \e[2;33m${_commands[$_pid]:0:$_level}\e[0m"	;;
+				_command="${_command}${S_DAYEL}?${S_NO}?? ${S_DAYEL}${_commands[$_pid]:0:$_level}${S_NO}"	;;
 			2)
-				_command="${_command}\e[0;31m?\e[0m?? \e[0;31m${_commands[$_pid]:0:$_level}\e[0m"	;;
+				_command="${_command}${S_NORED}?${S_NO}?? ${S_NORED}${_commands[$_pid]:0:$_level}${S_NO}"	;;
 			3)
-				_command="${_command}\e[0;33m?\e[0m?? \e[0;33m${_commands[$_pid]:0:$_level}\e[0m"	;;
+				_command="${_command}${S_NOYEL}?${S_NO}?? ${S_NOYEL}${_commands[$_pid]:0:$_level}${S_NO}"	;;
 		esac
 
 		printf -v _pid '%5d' $_pid
@@ -691,125 +757,157 @@ function getProcessTree()
 
 function _showExitHeader
 {
-	local _exit_tag="${1:-NO}"
-	local _exit_reason="${2:-}"
-
-	[[ "$_exit_tag" == 'NO' ]] && return 0
+	local _exit_tag="${1}"
+	local _exit_reason="${2}"
+	# USE _temp_stderr_output_file FROM THE CALLER !
 
 	local _crash_time _crash_after
 
 	printf -v _crash_time '%(%A %-d %B %Y @ %X)T' -1
 	TZ=UTC printf -v _crash_after '%(%X)T' $SECONDS
 
-	echo
-	echo -en "\r\e[0J"									########### TODO e[0J ???
-	echo -e "${_exit_tag} ${_exit_reason}"
-	echo -e "This has happened at ${S_NOWHI}${_crash_time}${S_NO}, after the script has run for ${S_NOWHI}${_crash_after}${S_NO}..."
-	echo
+	(( BASH_SUBSHELL == 0 )) && echo -en "\n\r${ES_CURSOR_TO_SCREEN_END}" >&2 # output this only on the screen !
+
+	{
+		echo ' '
+		echo -e "${_exit_tag} ${_exit_reason} (PID: $BASHPID)"
+		echo -e "This has happened at ${S_NOWHI}${_crash_time}${S_NO}, after the script has run for ${S_NOWHI}${_crash_after}${S_NO}..."
+		echo ' '
+	} >> "$_temp_stderr_output_file"
 }
 
 function _showDebugDetails
 {
-	local _line_number="${1}"
-	local _subshell_level="${2}"
-	local _last_exit_status="${3}"
-	local _last_command="${4}"
+	# USE _line_number FROM THE CALLER !
+	# USE _last_exit_status FROM THE CALLER !
+	# USE _last_command FROM THE CALLER !
+	# USE _temp_stderr_output_file FROM THE CALLER !
 
-	echo -e "${S_NOWHI}Calls history :${S_NO}"
-	for _index in ${!BASH_LINENO[@]}; do
-		printf '%5d ' ${BASH_LINENO[$_index]}
-		echo -e "${FUNCNAME[$_index]} \e[2m( in ${BASH_SOURCE[$_index]} )\e[0m"
-	done
-	echo
+	{
+		echo -e "${S_NOWHI}Calls history :${S_NO}"
+		for _index in ${!BASH_LINENO[@]}; do
+			printf '%5d ' ${BASH_LINENO[$_index]}
+			echo -e "${FUNCNAME[$_index]} ${S_DA}( in ${BASH_SOURCE[$_index]} )${S_NO}"
+		done
+		echo ' '
 
-	echo -e "Error reported near ${S_NOWHI}the line $_line_number${S_NO}, last known exit status is ${S_NOWHI}$_last_exit_status${S_NO}, the last executed command is :\n"
-	echo -e "\t${S_NOYEL}$_last_command${S_NO}"
-	echo
+		echo -e "Error reported near ${S_NOWHI}the line $_line_number${S_NO}, last known exit status is ${S_NOWHI}$_last_exit_status${S_NO}, the last executed command is :"
+		echo ' '
+		echo -e "        ${S_NOYEL}$_last_command${S_NO}"
+		echo ' '
 
-	echo -e "${S_NOWHI}  PID   Commands${S_NO}"
-	getProcessTree
-	echo
+		echo -e "${S_NOWHI}  PID   Commands${S_NO}"
+		getProcessTree
+		echo ' '
+	} >> "$_temp_stderr_output_file"
 }
 
-function _exitProperly
+function _preExitProperly
 {
 	# Reset all trap to default...
 	trap - EXIT INT QUIT TERM HUP ERR
 
 	# Desactive the hooked stderr...
-	echo "$SCRIPT_END_TAG" >&2
-	sleep 1
-	exec 2>&${stderr_backup}
+	(( BASH_SUBSHELL == 0 )) &&
+		exec 2>&${stderr_backup}
+}
 
-	if (( $(wc -l < "$SCRIPT_STDERR_FILE") > 0 )); then
+function _postExitProperly
+{
+	(( BASH_SUBSHELL != 0 )) &&	return 0
+
+	_temp_stderr_output_file="${_temp_stderr_output_file:-//}"
+	[[ -f "$_temp_stderr_output_file" ]] &&
+		cat "$_temp_stderr_output_file" >&2
+
+	[[ -f "$SCRIPT_STDERR_FILE" ]] && (( $(wc -l < "$SCRIPT_STDERR_FILE") > 0 )) &&	{
 		echo -e "${S_NOWHI}While it was running, the script has ouptut this on the STDERR :${S_NO}"
-		cat "$SCRIPT_STDERR_FILE" >&2
+		cat "$SCRIPT_STDERR_FILE"
 		echo
-	fi
+	} >&2
 
-	local _file_name
+	[[ -f "$_temp_stderr_output_file" ]] &&
+		cat "$_temp_stderr_output_file" >&${stderr_pipe}
 
-	# Remove all temporaries files...
-	for _file_name in "${post_script_remove_files[@]}"; do
-		if [[ -d "$_file_name" ]]; then
-			rm --preserve-root -f -r "$_file_name"
-		else
-			rm --preserve-root -f "$_file_name"
-		fi
-	done
+	echo "$LOOP_END_TAG" >&${stderr_pipe}
+	exec {stderr_pipe}>&-
+
+	{
+		sleep 2
+
+		[[ -f "$SCRIPT_STDERR_FILE" ]] && (( $(wc -l < "$SCRIPT_STDERR_FILE") > 0 )) && {
+			echo >> "$SCRIPT_STDERR_FILE"
+			cat "$SCRIPT_STDERR_FILE" >> "$PATH_LOG/$SCRIPT_NAME.log"
+		}
+
+		local _file_name
+
+		# Remove all temporaries files...
+		for _file_name in "${post_script_remove_files[@]}"; do
+			[[ -z "$_file_name" ]] && continue
+			[[ -d "$_file_name" ]] &&
+				rm --preserve-root -f -r "$_file_name" ||
+				rm --preserve-root -f "$_file_name"
+		done
+	} &
 }
 
 function safeExit
 {
-	_showExitHeader 'NO'
-	_exitProperly
+	_preExitProperly
+	_postExitProperly
 	exit 0
 }
 
 function unexpectedExit
 {
-	local _line_number="${1}"
-	local _subshell_level="${2}"
+	local _signal="${1}"
+	local _line_number="${2}"
 	local _last_exit_status="${3}"
 	local _last_command="${4}"
 
-	_showExitHeader "$A_ERROR_NR" "The script has unexpectedly exited for an unknown reason."
-	_showDebugDetails "$_line_number" "$_subshell_level" "$_last_exit_status" "$_last_command"
-	_exitProperly
-	exit 1
+	local _script
+	local _temp_stderr_output_file="$PATH_TMP/MEMORY/stderr-$BASHPID.log"
+
+	_preExitProperly
+
+	[[ ! -f "$_temp_stderr_output_file" ]] && echo -n '' > "$_temp_stderr_output_file"
+
+	(( BASH_SUBSHELL == 0 )) &&
+		_script='The script' ||
+		_script="A subshell ($BASH_SUBSHELL)"
+
+	case "$_signal" in
+		'EXIT')
+			_showExitHeader "$A_ERROR_BR" "${S_NOWHI}$_script${S_NO} has unexpectedly exited for an unknown reason."
+			_showDebugDetails
+			;;
+		'INT')
+			_showExitHeader "$A_ABORTED_NY" "${S_NOWHI}$_script${S_NO} has exited because used has pressed [CTRL]-[C]."
+			;;
+		'TERM')
+			_showExitHeader "$A_ABORTED_NY" "${S_NOWHI}$_script${S_NO} has stopped because the signal TERM has been received."
+			;;
+		'ERR')
+			_showExitHeader "$A_ERROR_BR" "${S_NOWHI}$_script${S_NO} has crashed because of an unexpected error."
+			_showDebugDetails
+			;;
+	esac
+
+	if (( BASH_SUBSHELL == 0 )); then
+		_postExitProperly
+	else
+		cat "$_temp_stderr_output_file" >&2
+	fi
+
+	(( _last_exit_status == 0 )) && (( ++_last_exit_status ))
+	exit $_last_exit_status
 }
 
-function interruptExit		# CTRL-C
-{
-	_showExitHeader "$A_ABORTED_NY" "The script has exited because used has pressed [CTRL]-[C]."
-	_exitProperly
-	exit 1
-}
-
-function terminateExit		# `kill`
-{
-	_showExitHeader "$A_ABORTED_NY" "The script has stopped because the signal TERM has been received."
-	_exitProperly
-	exit 1
-}
-
-function errorExit
-{
-	local _line_number="${1}"
-	local _subshell_level="${2}"
-	local _last_exit_status="${3}"
-	local _last_command="${4}"
-
-	_showExitHeader "$A_ERROR_BR" "The script has crashed because of an unexpected error."
-	_showDebugDetails "$_line_number" "$_subshell_level" "$_last_exit_status" "$_last_command"
-	_exitProperly
-	exit 1
-}
-
-trap 'unexpectedExit "$LINENO" "$BASH_SUBSHELL" "$?" "$BASH_COMMAND"' EXIT
-trap 'interruptExit' INT QUIT
-trap 'terminateExit' TERM HUP
-trap 'errorExit "$LINENO" "$BASH_SUBSHELL" "$?" "$BASH_COMMAND"' ERR
+trap 'unexpectedExit "EXIT" "$LINENO" "$?" "$BASH_COMMAND"' EXIT
+trap 'unexpectedExit "INT"  "$LINENO" "$?" "$BASH_COMMAND"' INT QUIT
+trap 'unexpectedExit "TERM" "$LINENO" "$?" "$BASH_COMMAND"' TERM HUP
+trap 'unexpectedExit "ERR"  "$LINENO" "$?" "$BASH_COMMAND"' ERR
 
 
 
@@ -826,11 +924,11 @@ function getFileTypeV
 	local _file_name="${1:?unbound variable: function getFileTypeV need a filename to check !}"
 
 	local _return_var_name="${2:-file_type}"
-
 	local _type _exist _link
 
 	[[ -L "$_file_name" ]] && _link='l' || _link=' '
-	if [[ -e "$_file_name" ]]; then
+	[[ -e "$_file_name" ]] &&
+	{
 		_exist='E'
 		if [[ -f "$_file_name" ]]; then
 			_type='f'
@@ -847,12 +945,128 @@ function getFileTypeV
 		else
 			_type='?'
 		fi
-	else
+	} ||
+	{
 		_exist=' '
 		_type=' '
-	fi
+	}
 
 	printf -v "$_return_var_name" '%s%s%s' "$_exist" "$_link" "$_type"
+}
+
+function checkFilename
+{
+	# https://docs.microsoft.com/en-us/windows/desktop/FileIO/naming-a-file
+
+	local _file_name="${1:-}"
+
+	[[	"$_file_name" == '' ||
+		"${_file_name:(-1)}" == '.' ||
+		"${_file_name:(-1)}" == ' ' ||
+		"${_file_name:0:1}" == ' ' ||
+		"$_file_name" =~ $FILENAME_FORBIDEN_CHARS ||
+		"${_file_name^^}" =~ $FILENAME_FORBIDEN_NAMES ]] && return 1
+
+	return 0
+}
+
+function checkLockfileOwned
+{
+	local _lockfile_name="${1:-${SCRIPT_NAME}}"
+	local -ir _lockfile_pid="${2:-$SCRIPT_PID}"
+
+	_lockfile_name="$PATH_LOCK/${_lockfile_name%.sh}.lock"
+
+	local -i _file_pid
+
+	{
+		if [[ -f "$_lockfile_name" ]]; then
+			read _file_pid < "$_lockfile_name" && {
+				if (( $(ps -p $_file_pid -ho pid || echo 0) == _file_pid )); then
+					(( _file_pid == _lockfile_pid )) &&
+						return 0 || 				# Lockfile is mine :)
+						return 3 					# Lockfile isn't mine
+				else
+					return 4 						# the process dosen't exist anymore
+				fi
+			}
+		else
+			return 2								# Lockfile dosen't exist
+		fi
+	} 2> /dev/null
+
+	return 1 									# Unknown error with read...
+}
+
+function takeLockfile
+{
+	local -r _lockfile_name="${1:-${SCRIPT_NAME}}"
+	local -ir _lockfile_pid="${2:-$SCRIPT_PID}"
+
+	local _lockfile_temp_fullname="${_lockfile_name%.sh}-${SCRIPT_NAME%.sh}-${_lockfile_pid}-$SCRIPT_PID.tmp-lock"
+	local _lockfile_fullname="${_lockfile_name%.sh}.lock"
+
+	checkFilename "$_lockfile_fullname" || errcho ':EXIT:' "function takeLockfile: Invalid file name ! ($_lockfile_fullname)"
+	checkFilename "$_lockfile_temp_fullname" || errcho ':EXIT:' "function takeLockfile: Invalid file name ! ($_lockfile_temp_fullname)"
+
+	_lockfile_fullname="$PATH_LOCK/$_lockfile_fullname"
+	_lockfile_temp_fullname="$PATH_LOCK/$_lockfile_temp_fullname"
+
+	local -i _try=5 _status _file_pid
+
+	while (( _try-- > 0 )); do
+		checkLockfileOwned "$_lockfile_name" "$_lockfile_pid" && return 0 || _status=$?
+
+		case $_status in
+			1)
+				sleep 0.1
+				;;
+			2)
+				# Create or overwrite the temporary lock file...
+				echo "$_lockfile_pid" >| "$_lockfile_temp_fullname"
+
+				mv -n "$_lockfile_temp_fullname" "$_lockfile_fullname"
+				[[ ! -f "$_lockfile_temp_fullname" ]] && {
+					(( ++_try ))
+					post_script_remove_files+=( "$_lockfile_fullname" )
+				} || sleep 0.5
+				;;
+			3)
+				break
+				;;
+			4)
+				rm --preserve-root -f "$_lockfile_fullname"
+				;;
+			*)
+				break
+				;;
+		esac
+
+		sleep 0.1
+	done
+
+	sleep 0.2
+	rm --preserve-root -f "$_lockfile_temp_fullname"
+	return 1
+}
+
+function releaseLockfile
+{
+	local -r _lockfile_name="${1:-${SCRIPT_NAME}}"
+	local -ir _lockfile_pid="${2:-$SCRIPT_PID}"
+
+	local _lockfile_fullname="${_lockfile_name%.sh}.lock"
+
+	checkFilename "$_lockfile_fullname" || errcho ':EXIT:' 'function releaseLockfile: Invalid file name !'
+
+	_lockfile_fullname="$PATH_LOCK/$_lockfile_fullname"
+	removeArrayItem post_script_remove_files 0 "$_lockfile_fullname"
+
+	checkLockfileOwned "$_lockfile_name" "$_lockfile_pid" &&
+		rm --preserve-root -f "$_lockfile_fullname" ||
+		return 1
+
+	return 0
 }
 
 
@@ -885,8 +1099,7 @@ function processTimeResultsV
 	local _real_time=0 _user_time=0 _system_time=0		# for units parts
 	local _real_time2=0 _user_time2=0 _system_time2=0	# for decimals parts
 
-	shopt -q extglob
-	_extglob="$?"
+	shopt -q extglob &&	_extglob='0' || _extglob='1'
 
 	[[ $_extglob -eq 1 ]] && shopt -s extglob
 
@@ -967,6 +1180,8 @@ post_script_remove_files+=( $(
 readonly SCRIPT_STDERR_FILE="$PATH_TMP/MEMORY/stderr.log"
 readonly SCRIPT_STDERR_PIPE="$PATH_TMP/stderr.pipe"
 
+
+
 #==============================================================================#
 #==     Globals variables post-definition                                    ==#
 #==============================================================================#
@@ -991,13 +1206,13 @@ exec {stderr_pipe}<>"$SCRIPT_STDERR_PIPE" {stderr_backup}>&2 2>&${stderr_pipe}
 
 	(( $SCRIPT_WINDOWED_STDERR == 1 )) && konsole --profile FooPhoenix -e tail --pid $SCRIPT_PID -qf "$SCRIPT_STDERR_FILE" &
 
-	while read -u ${stderr_pipe} -t 120 message || checkLoopFail; do
+	while IFS= read -u ${stderr_pipe} -t 120 message || checkLoopFail; do
 		[[ -z "$message" ]] && continue
 		checkLoopEnd "$message" && break
 
-		printf -v current_time '%(%X)T' -1
+		printf -v current_time '%(%d.%m.%Y %X)T' -1
 		TZ=UTC printf -v elapsed_time '%(%X)T' $SECONDS
-		printf '[%s - %s] %s\n' "$current_time" "$elapsed_time" "$message" >&${stderr_file}
+		printf '%s %s %s %s\n' "$current_time" "$elapsed_time" "$SCRIPT_PID" "$message" >&${stderr_file}
 	done
 
 	exec {stderr_pipe}<&-
@@ -1015,10 +1230,36 @@ function __change_log__
 {
 	: << 'COMMENT'
 
+	19.06.2019
+		Add script lockfile management functions. (part 3)
+		Add arrays management functions (remove item, remove duplicate item)
+
+	18.06.2019
+		Fix : PATH_LOG='/var/log' is not writable for non-root users, so I have make a new folder
+				with full rights access, and changed the constant to PATH_LOG='/var/log/userlog'
+		Fix : Close the {stderr_pipe} canal on script exit.
+		Rebuild all the script exit mechanics... (part 2)
+		Add script lockfile management functions. (part 2)
+		Fix : Add the PID of the main shell to each log line.
+		Fix the _related_pid in checkLoopFail function, to use the correct pipe_parent_process_id variable
+				instead of the SCRIPT_PID constant.
+
+	11.06.2019
+		Rebuild all the script exit mechanics... (part 1)
+
+	10.06.2019
+		Add checkFilename function to check if file name is valid or not.
+		Add script lockfile management functions. (part 1)
+		Fix _exitProperly function, now post_script_remove_files[] can contain empty string,
+				this allow to remove a file in the list.
+		Make some optimization with conditions if, [[]], (()), etc... on the whole code.
+
 	09.06.2019
 		Add a more generic function to create CSI ANSI codes.
 		Add some functions and constants for ANSI cursor and screen manipulation.
 		Removed an echoed empty line when the script finish normally without any message.
+		Fix some hardcoded ANSI code in _showExitHeader and _showDebugDetails functions.
+		Fix hardcoded ANSI code in getProcessTree function.
 
 	04.06.2019
 		Add a dummy function __change_log__ to write some... change log ;)
