@@ -12,7 +12,7 @@
 #	of others scripts.														   #
 #																			   #
 ################################################################################
-#														27.05.2019 - 24.06.2019
+#														27.05.2019 - 07.07.2019
 
 
 # Make Bash a bit more robust to bugs...
@@ -30,9 +30,14 @@ set -eEuC
 
 declare -ri SCRIPT_START_TIME=$( date '+%s' ) 		# The script start time
 declare -r  SCRIPT_NAME="${0##*/}"
-declare -r  SCRIPT_PATH="${0}"
-declare -r  SCRIPT_REAL_PATH="$(readlink -qsf "${0}")"
+declare -r  SCRIPT_FULLNAME="${0}"
+declare -r  SCRIPT_REAL_FULLNAME="$(readlink -qsf "${0}")"
 
+declare -r  SCRIPT_TTY="$(tty > /dev/null && tty || echo '')"
+declare -ri SCRIPT_ENSURE_LOCKFILE=${SCRIPT_ENSURE_LOCKFILE:-0}
+declare -ri SCRIPT_ENSURE_ROOT=${SCRIPT_ENSURE_ROOT:-0}
+declare -ri SCRIPT_ENSURE_TTY=${SCRIPT_ENSURE_TTY:-0}
+declare -r  SCRIPT_NEW_TTY_NO_CLOSE="${SCRIPT_NEW_TTY_NO_CLOSE:-}" # -- -- -- SCRIPT_NEW_TTY_NO_CLOSE='NO-CLOSE'
 declare -ri SCRIPT_PID=$BASHPID 		# Store the BASHPID value is usefull to give it to a subshell, since use BASHPID don't
 										# expand to the good PID inside the subshell itself, and the BASHPPID don't exist...
 
@@ -40,24 +45,24 @@ declare -ri SCRIPT_WINDOWED_STDERR=${SCRIPT_WINDOWED_STDERR:-0}
 
 declare -ri SCRIPT_DARKEN_BOLD=${SCRIPT_DARKEN_BOLD:-1}
 
-# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
 unset CDPATH 	# Reserved Bash constant. Security issue : https://bosker.wordpress.com/2012/02/12/bash-scripters-beware-of-the-cdpath/
 declare -r TIMEFORMAT='%R-%U-%S' 	# Reserved Bash constant to choose the format of `time` command.
 
-# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
 declare -r PATH_LOG='/var/log/userlog'
 declare -r PATH_LOCK='/run/lock'
 declare -r PATH_RAM_DISK='/dev/shm'
 declare -r PATH_TMP="$(mktemp --tmpdir -d "${SCRIPT_NAME%.sh}-XXXXXXXX.tmp")"
 
-# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
 # The Infrastructures path can be overrided just before including this script...
 declare -r PATH_INFRASTRUCTURES="${PATH_INFRASTRUCTURES:-/media/foophoenix/AppKDE/Infrastructures}"
 
-# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
 declare -r  PADDING_SPACE='                                                                                                                                                                                                                                                               '
 declare -r  PADDING_ZERO='00000000000000000000'
@@ -69,7 +74,7 @@ declare -r  LOOP_END_TAG=':END:'		# Used in pipes to say to a loop it can exit.
 declare -r  FILENAME_FORBIDEN_CHARS="[;\":/\\*?|<>$(echo -en "$(printf '\\x%x' {1..31})")]"
 declare -r  FILENAME_FORBIDEN_NAMES='^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\..*)?$'
 
-# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
 
 
@@ -82,15 +87,17 @@ declare -i debugTimeIteration=10	# Default number of iteration to do with `time`
 declare -a debugTimeResults=( )	# Array to store results of `time`
 declare    debugTimeResult=''		# The default variable
 
-# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
 declare -a scriptPostRemoveFiles=( "$PATH_TMP" )
 
-# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
 declare -i pipeExpectedEnd=1
 declare -i pipeReceivedEnd=0
 declare -i pipeParentProcessID=$SCRIPT_PID
+
+# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
 
 
@@ -161,7 +168,7 @@ function removeArrayDuplicate
 	eval "$ad_source_code"
 }
 
-# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
 declare -rf removeArrayItem removeArrayDuplicate
 
@@ -185,7 +192,7 @@ function _getCSI
 	echo -en "\e[${parameters}${type}"
 }
 
-# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
 declare -ri _CSIM_BOLD=1
 declare -ri _CSIM_DARK=2
@@ -238,14 +245,14 @@ declare -ri _CSIM_BACKGROUND_LIGHT_MAGENTA=105
 declare -ri _CSIM_BACKGROUND_LIGHT_CYAN=106
 declare -ri _CSIM_BACKGROUND_WHITE=107
 
-# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
 function getCSIm
 {
 	_getCSI 'm' "${@}"
 }
 
-# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
 declare -r SCRIPT_DARKEN_BOLD_TAG="$( (( SCRIPT_DARKEN_BOLD == 0 )) || getCSIm ${_CSIM_DARK} )"
 
@@ -267,7 +274,7 @@ declare -r S_R_BA="$(getCSIm ${_CSIM_RESET_BARRED})"
 declare -r S_R_CF="$(getCSIm ${_CSIM_RESET_COLORF})"
 declare -r S_R_CB="$(getCSIm ${_CSIM_RESET_COLORB})"
 
-# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
 # FOREGROUND COLOR
 declare -r S_BLA="$(getCSIm ${_CSIM_FOREGROUND_BLACK})"
@@ -305,7 +312,7 @@ declare -r S_B_LMA="$(getCSIm ${_CSIM_BACKGROUND_LIGHT_MAGENTA})"
 declare -r S_B_LCY="$(getCSIm ${_CSIM_BACKGROUND_LIGHT_CYAN})"
 declare -r S_B_WHI="$(getCSIm ${_CSIM_BACKGROUND_WHITE})"
 
-# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
 # NORMAL + FOREGROUND COLOR
 declare -r S_NOBLA="$(getCSIm ${_CSIM_RESET_ALL} ${_CSIM_FOREGROUND_BLACK})"
@@ -325,7 +332,7 @@ declare -r S_NOLMA="$(getCSIm ${_CSIM_RESET_ALL} ${_CSIM_FOREGROUND_LIGHT_MAGENT
 declare -r S_NOLCY="$(getCSIm ${_CSIM_RESET_ALL} ${_CSIM_FOREGROUND_LIGHT_CYAN})"
 declare -r S_NOWHI="$(getCSIm ${_CSIM_RESET_ALL} ${_CSIM_FOREGROUND_WHITE})"
 
-# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
 # BOLD + FOREGROUND COLOR
 declare -r S_BOBLA="$(getCSIm ${_CSIM_BOLD} ${_CSIM_FOREGROUND_BLACK})$SCRIPT_DARKEN_BOLD_TAG"
@@ -345,7 +352,7 @@ declare -r S_BOLMA="$(getCSIm ${_CSIM_BOLD} ${_CSIM_FOREGROUND_LIGHT_MAGENTA})$S
 declare -r S_BOLCY="$(getCSIm ${_CSIM_BOLD} ${_CSIM_FOREGROUND_LIGHT_CYAN})$SCRIPT_DARKEN_BOLD_TAG"
 declare -r S_BOWHI="$(getCSIm ${_CSIM_BOLD} ${_CSIM_FOREGROUND_WHITE})$SCRIPT_DARKEN_BOLD_TAG"
 
-# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
 function getCSI_RGB
 {
@@ -411,7 +418,7 @@ function showRGB_Palette
 	done
 }
 
-# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
 function getCSI_CursorMove
 {
@@ -435,7 +442,7 @@ function getCSI_CursorMove
 	fi
 }
 
-# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
 declare -r CO_HIDE="$(_getCSI 'l' '?25')"
 declare -r CO_SHOW="$(_getCSI 'h' '?25')"
@@ -443,7 +450,10 @@ declare -r CO_SHOW="$(_getCSI 'h' '?25')"
 declare -r CO_SAVE_POS="$(_getCSI 's')"
 declare -r CO_RESTORE_POS="$(_getCSI 'u')"
 
-# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+declare -r CO_GO_TOP_LEFT="$(getCSI_CursorMove Position 1 1)"
+declare -r CO_UP_1="$(getCSI_CursorMove Up 1)"
+
+# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
 declare -r ES_CURSOR_TO_SCREEN_END="$(_getCSI 'J' '0')"
 declare -r ES_CURSOR_TO_SCREEN_START="$(_getCSI 'J' '1')"
@@ -453,7 +463,7 @@ declare -r ES_CURSOR_TO_LINE_END="$(_getCSI 'K' '0')"
 declare -r ES_CURSOR_TO_LINE_START="$(_getCSI 'K' '1')"
 declare -r ES_ENTIRE_LINE="$(_getCSI 'K' '2')"
 
-# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
 function getCSI_ScreenMove
 {
@@ -466,9 +476,21 @@ function getCSI_ScreenMove
 	_getCSI "${direction}" "${number}"
 }
 
-# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
-declare -rf _getCSI getCSIm getCSI_RGB getCSI_GRAY showRGB_Palette getCSI_CursorMove getCSI_ScreenMove
+function removeCSI_Tag
+{
+	sed -e "s|"$'\e'"\[?\?[0-9]*\(;[0-9]\+\)*[mlhsuJKHGABCDSTLM]||g" <<< "${*}"
+}
+
+function getCSI_StringLength
+{
+	echo $(expr length "$(removeCSI_Tag "${*}")" || :)
+}
+
+# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+
+declare -rf _getCSI getCSIm getCSI_RGB getCSI_GRAY showRGB_Palette getCSI_CursorMove getCSI_ScreenMove removeCSI_Tag getCSI_StringLength
 
 
 
@@ -494,7 +516,7 @@ function getActionTag
 	echo -en "${S_NOWHI}[${tag_color}${PADDING_SPACE:0:$tag_name_size1}${tag_name}${PADDING_SPACE:0:$tag_name_size2}${S_NOWHI}]${S_R_AL}"
 }
 
-# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
 declare -r A_IN_PROGRESS="$(getActionTag 'IN PROGRESS' "$S_NO")"
 declare -r A_OK="$(getActionTag 'OK' "$S_GRE")"
@@ -529,7 +551,7 @@ declare -r A_BACKUPED_G="$(getActionTag 'BACKUPED' "$S_GRE")"
 declare -r A_EMPTY_TAG="$(getActionTag '  ' "$S_NO")"
 declare -r A_TAG_LENGTH_SIZE="${PADDING_SPACE:0:$(( ACTION_TAG_SIZE + 2 ))}"
 
-# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
 declare -rf getActionTag
 
@@ -610,8 +632,8 @@ function checkLoopEnd
 
 function getProcessTree
 {
-	local -r  var_name="${1:-}"
-	local -i  screen_size=${2:-$(( $( tput cols ) ))}
+	local -r  return_var_name="${1:-}"
+	local -i  screen_size=${2:-$(( $( tput cols ) ))} # TODO : Debug, crash without tty...
 	local -i  pid ppid
 	local     command
 	local -ai ppids
@@ -758,15 +780,15 @@ function getProcessTree
 		esac
 
 		printf -v padded_pid '%5d' $pid
-		[[ -z "$var_name" ]] &&
+		[[ -z "$return_var_name" ]] &&
 			echo -e "${output}${padded_pid} ${command}" ||
 			output="${output}${padded_pid} ${command}\n"
 
 #  		echo -e "${pid} ${command}"
 	done
 
-	[[ -n "$var_name" ]] &&
-		printf -v $var_name '%s' "$output"
+	[[ -n "$return_var_name" ]] &&
+		printf -v $return_var_name '%s' "$output"
 
 	return 0
 }
@@ -922,11 +944,11 @@ function unexpectedExit
 	exit $last_exit_status
 }
 
-# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
 declare -rf errcho checkLoopFail checkLoopEnd getProcessTree _showExitHeader _showDebugDetails _preExitProperly _postExitProperly safeExit unexpectedExit
 
-# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
 trap 'unexpectedExit "EXIT" "$LINENO" "$?" "$BASH_COMMAND"' EXIT
 trap 'unexpectedExit "INT"  "$LINENO" "$?" "$BASH_COMMAND"' INT QUIT
@@ -938,16 +960,16 @@ trap 'unexpectedExit "ERR"  "$LINENO" "$?" "$BASH_COMMAND"' ERR
 ################################################################################
 ################################################################################
 ####                                                                        ####
-####     Filenames and paths functions                                      ####
+####     Files and paths functions                                          ####
 ####                                                                        ####
 ################################################################################
 ################################################################################
 
 function getFileTypeV
 {
-	local -r file_name="${1}"
+	local -r return_var_name="${1}"
+	local -r file_name="${2}" # TODO : rename to filename
 
-	local -r return_var_name="${2:-file_type}"
 	local    type exist link
 
 	[[ -L "$file_name" ]] && link='l' || link=' '
@@ -978,6 +1000,47 @@ function getFileTypeV
 	printf -v "$return_var_name" '%s%s%s' "$exist" "$link" "$type"
 }
 
+function getFileSizeV()
+{
+	local -r return_var_name="${1}"
+	local full_filename="${2}"
+
+	printf -v $return_var_name '%d' "$(stat --format=%s "$full_filename" || echo 0)"
+}
+
+function formatSizeV
+{
+	local -r  return_var_name="${1}"
+	local -ir input_size="${2}"
+	local -ir padding="${3:-0}"
+
+	local final_size=''
+	local size_=$input_size
+
+	(( padding > 0 )) && {
+		(( padding >= ${#input_size} )) &&
+			final_size="${PADDING_SPACE:0:padding-${#size_}}${final_size}" ||
+			size_=+${input_size:0-padding+1}
+	}
+
+	local -i index pos length
+
+	(( pos = 0, length = ${#size_} % 3, index = ${#size_} / 3, length > 0 )) && { # pos = 0,
+		final_size+=${formatSizeV_Colors[index]}${size_:pos:length}
+		(( pos += length ))
+	}
+
+	(( --index >= 0 )) && {
+		length=3
+		while [[ 1 ]]; do
+			final_size+=${formatSizeV_Colors[index]}${size_:pos:length}
+			(( pos += 3, --index < 0 )) && break
+		done
+	}
+
+	printf -v $return_var_name "${S_NO}%s${S_R_AL}" "$final_size"
+}
+
 function checkFilename
 {
 	# https://docs.microsoft.com/en-us/windows/desktop/FileIO/naming-a-file
@@ -993,6 +1056,115 @@ function checkFilename
 
 	return 0
 }
+
+function cloneFolderDetails
+{
+	local -r foldername="${3}"
+	local -r source="${1}/$foldername"
+	local -r destination="${2}/$foldername"
+
+	[[ -d "$source" ]] && {
+		[[ ! -e "$destination" ]] && mkdir "$destination"
+		[[ -d "$destination" ]] && {
+			local -ar details=( $(stat -c "%a %u %g" "$source") )
+
+			chown ${details[1]}:${details[2]} "$destination" &&
+			chmod ${details[0]} "$destination" &&
+			return 0
+		}
+	}
+
+	return 0
+}
+
+function clonePathDetails
+{
+	local -r source="${1}"
+	local -r destination="${2}"
+	local    relative_folders_path="${3}"
+
+	[[ ! -d "$destination/$relative_folders_path" ]] && [[ -d "$source/$relative_folders_path" ]] && {
+		local -a folders
+		local folder folder_path
+
+		IFS='/' read -a folders <<< "$relative_folders_path"
+
+		relative_folders_path=''
+		for folder in "${folders[@]}"; do
+			relative_folders_path+="/$folder"
+
+			folder_path="$destination/${relative_folders_path:1}"
+
+			[[ ! -e "$folder_path" ]] && {
+				local -a details=( $(stat -c "%a %u %g" "$source") )
+
+				mkdir "$folder_path"
+				chown ${details[1]}:${details[2]} "$folder_path"
+				chmod ${details[0]} "$folder_path"
+			}
+		done
+	}
+
+	return 0
+}
+
+function shortenFileNameV
+{
+	local -r  return_var_name="${1}"
+	local     full_filename="${2}"
+	local -ir max_size="${3}"
+	local -ir max_filename_size="${4:-48}"
+
+	(( ${#full_filename} > max_size )) && {
+		local slash=''
+
+		[[ "${full_filename:(-1)}" == '/' ]] && {
+			slash='/'
+			full_filename="${full_filename:0:(-1)}"
+		}
+
+		local     filename_="${full_filename##*/}$slash"
+		local     path="${full_filename%/*}/"
+		local -ir filename_size=${#filename_}
+		local -ir path_size=${#path}
+
+		local -i cut_size_1 cut_size_2 cut_size=$filename_size
+
+		(( filename_size > max_filename_size )) && {
+			((  cut_size = max_size - (path_size + max_filename_size),
+				cut_size = cut_size > 0 ? cut_size + max_filename_size : max_filename_size,
+				cut_size_1 = (cut_size / 2) - 3 + (cut_size % 2),
+				cut_size_2 = (cut_size / 2) ))
+
+			filename_="${filename_:0:$cut_size_1}...${filename_:(-$cut_size_2)}"
+		}
+
+		(( cut_size = max_size - cut_size, path_size > cut_size )) && {
+			(( 	cut_size_1 = (cut_size / 2) - 3 + (cut_size % 2),
+				cut_size_2 = (cut_size / 2) ))
+
+			path="${path:0:$cut_size_1}...${path:(-$cut_size_2)}"
+		}
+
+		full_filename="${path}${filename_}"
+	}
+
+	printf -v $return_var_name '%s' "$full_filename"
+}
+
+# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+
+declare -rf getFileTypeV checkFilename cloneFolderDetails clonePathDetails shortenFileNameV formatSizeV getFileSizeV
+
+
+
+################################################################################
+################################################################################
+####                                                                        ####
+####     Criticals sections functions                                       ####
+####                                                                        ####
+################################################################################
+################################################################################
 
 function checkLockfileOwned
 {
@@ -1093,9 +1265,161 @@ function releaseLockfile
 	return 0
 }
 
-# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
-declare -rf getFileTypeV checkFilename checkLockfileOwned takeLockfile releaseLockfile
+function checkSectionStatus
+{
+	local -r section_name="${1}"
+	local    section_path="${2:-.}"
+
+	section_path="${section_path%/}"
+	section_path="${section_path#/}"
+
+	local -r section_filename="$PATH_TMP/$section_path/section-$section_name.txt"
+
+	[[ -f "$section_filename" ]] &&
+	{
+		local -l status
+
+		read status < "$section_filename"
+		[[ "$status" == 'done' ]] &&
+			return 1
+	}
+
+	return 0
+}
+
+function makeSectionStatusDone
+{
+	local -r section_name="${1}"
+	local    section_path="${2:-.}"
+
+	section_path="${section_path%/}"
+	section_path="${section_path#/}"
+
+	checkFilename "$section_name" || errcho ':EXIT:' "Bad section name ! ($section_name)"
+
+	local -r section_filename="$PATH_TMP/$section_path/section-$section_name.txt"
+
+	echo "done" >| "$section_filename"
+}
+
+function makeSectionStatusUncompleted
+{
+	local -r section_name="${1}"
+	local    section_path="${2:-.}"
+
+	section_path="${section_path%/}"
+	section_path="${section_path#/}"
+
+	checkFilename "$section_name" || errcho ':EXIT:' "Bad section name ! ($section_name)"
+
+	local -r section_filename="$PATH_TMP/$section_path/section-$section_name.txt"
+
+	echo "uncompleted" >| "$section_filename"
+}
+
+# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+
+declare -rf checkLockfileOwned takeLockfile releaseLockfile checkSectionStatus makeSectionStatusDone makeSectionStatusUncompleted
+
+
+
+################################################################################
+################################################################################
+####                                                                        ####
+####     Miscellaneous functions                                            ####
+####                                                                        ####
+################################################################################
+################################################################################
+
+function ensureTTY
+{
+	local no_close="${1:-}"
+
+	[[ -n "$SCRIPT_TTY" ]] || {
+		[[ "${no_close^^}" == "NO-CLOSE" ]] && {
+			no_close='--noclose'
+			shift
+		} || no_close=''
+
+		konsole --profile FooPhoenix $no_close -e "$SCRIPT_FULLNAME" 'TTY-OK' "${@}"
+		safeExit
+	}
+}
+
+function ensureRoot
+{
+	[[ "$(id -nu)" == "root" ]] || {
+		sudo "$SCRIPT_FULLNAME" "${@}"
+		safeExit
+	}
+}
+
+function getWordUserChoiceV()
+{
+	local -r  return_var_name="${1}"; shift
+
+	local -ar words=( ${*} )
+
+	local -i char_index selected_word
+	local    char words_preview="${S_NOYEL}"
+	local -u chars='' readed_key
+	local -l word
+
+	for word in ${words[@]}; do
+		char_index=0
+		while (( char_index < ${#word} )); do
+			char=${word:$char_index:1}
+			if [[ $chars == *${char^^}* ]]; then
+				words_preview+="${char}"
+			else
+				chars+="${char}"
+				words_preview+="${S_DA}[${S_BOLYE}${char^^}${S_NOYEL}${S_DA}]${S_NOYEL}"
+				(( ++char_index < ${#word} )) && words_preview+="${word:$char_index}"
+				words_preview+=" "
+				break
+			fi
+			(( ++char_index ))
+		done
+	done
+
+	words_preview+="${S_R_AL}: "
+	echo -en "$words_preview"
+
+	while (( 1 )); do
+		read -sn 1 readed_key
+
+		char_index=0
+		selected_word=0
+		while (( char_index < ${#chars} )); do
+			char=${chars:$char_index:1}
+			(( ++char_index ))
+			if [[ $char == "$readed_key" ]]; then
+				selected_word=$char_index
+				break
+			fi
+		done
+		if [ $selected_word -gt 0 ]; then
+			break
+		fi
+	done
+
+	printf -v $return_var_name '%d' $selected_word
+}
+
+function getTimerV()
+{
+	local    return_var_name="${1:-}"
+	local -r time_format="${2:-$getTimerV_Format}"
+
+	[[ -n "$return_var_name" ]] &&
+		return_var_name="-v $return_var_name"
+
+	TZ=UTC printf $return_var_name "%($time_format)T" $SECONDS
+}
+
+declare -rf ensureTTY ensureRoot getWordUserChoiceV getTimerV
 
 
 
@@ -1170,7 +1494,7 @@ function processTimeResultsV
 	debugTimeResults=( )
 }
 
-# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
 declare -rf processTimeResultsV
 
@@ -1184,9 +1508,9 @@ declare -rf processTimeResultsV
 ################################################################################
 
 # Ensure this script is inclued into an other and not executed itself !
-[[ "$SCRIPT_NAME" == '.script_common.sh' ]] && errcho ':EXIT:' 'ERROR: The script .script_common.sh need to be inclued in an other script...'
+[[ "$SCRIPT_NAME" != '.script_common.sh' ]] || errcho ':EXIT:' 'ERROR: The script .script_common.sh need to be inclued in an other script...'
 
-# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
 # Make the ram part of the temporary directory
 scriptPostRemoveFiles+=( $(
@@ -1199,7 +1523,7 @@ scriptPostRemoveFiles+=( $(
 	echo "$path_tmp_ram"
 ) )
 
-# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
 
 
@@ -1217,6 +1541,9 @@ declare -r SCRIPT_STDERR_PIPE="$PATH_TMP/stderr.pipe"
 #==============================================================================#
 #==     Globals variables post-definition                                    ==#
 #==============================================================================#
+
+declare -a formatSizeV_Colors=( "$S_WHI" "$S_LGR" "$S_GRE" "$S_YEL" "$S_LRE" "$S_RED" "$S_CYA" )
+declare    getTimerV_Format='%H:%M:%S'
 
 
 
@@ -1238,12 +1565,16 @@ exec {stderr_pipe}<>"$SCRIPT_STDERR_PIPE" {stderr_backup}>&2 2>&${stderr_pipe}
 
 	(( $SCRIPT_WINDOWED_STDERR == 1 )) && konsole --profile FooPhoenix -e tail --pid $SCRIPT_PID -qf "$SCRIPT_STDERR_FILE" &
 
+	lastMessage=''
 	while IFS= read -u ${stderr_pipe} -t 120 message || checkLoopFail; do
 		[[ -n "$message" ]] || continue
 		checkLoopEnd "$message" || break
 
+		[[ "$message" == "$lastMessage" ]] && continue
+		lastMessage=$"$message"
+
 		printf -v current_time '%(%d.%m.%Y %X)T' -1
-		TZ=UTC printf -v elapsed_time '%(%X)T' $SECONDS
+		getTimerV 'elapsed_time'
 		printf '%s %s %s %s\n' "$current_time" "$elapsed_time" "$SCRIPT_PID" "$message" >&${stderr_file}
 	done
 
@@ -1251,16 +1582,78 @@ exec {stderr_pipe}<>"$SCRIPT_STDERR_PIPE" {stderr_backup}>&2 2>&${stderr_pipe}
 	exec {stderr_file}<&-
 } &
 
+[[ "${1:-}" == 'TTY-OK' ]] && {
+	shift
+	[[ -n "$SCRIPT_TTY" ]] || errcho ':EXIT:' 'ERROR: No TTY available whereas there should be one.'
+}
+
+# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+
+(( SCRIPT_ENSURE_TTY  > 0 )) && ensureTTY $SCRIPT_NEW_TTY_NO_CLOSE "${@}"
+(( SCRIPT_ENSURE_LOCKFILE > 0 )) && { takeLockfile || errcho ':EXIT:' 'The lockfile of this script is already in use...'; }
+(( SCRIPT_ENSURE_ROOT > 0 )) && ensureRoot "${@}"
 
 
-################################################################################
-################################################################################
-
-
+################################################################################################################################################################
+#
+# SCRIPT_START_TIME SCRIPT_NAME SCRIPT_FULLNAME SCRIPT_REAL_FULLNAME SCRIPT_TTY SCRIPT_ENSURE_LOCKFILE SCRIPT_ENSURE_ROOT SCRIPT_ENSURE_TTY SCRIPT_NEW_TTY_NO_CLOSE
+# SCRIPT_PID SCRIPT_WINDOWED_STDERR SCRIPT_DARKEN_BOLD PATH_LOG PATH_LOCK PATH_RAM_DISK PATH_TMP PATH_INFRASTRUCTURES PADDING_SPACE PADDING_ZERO ACTION_TAG_SIZE
+# LOOP_END_TAG FILENAME_FORBIDEN_CHARS FILENAME_FORBIDEN_NAMES debugTimeIteration debugTimeResults debugTimeResult scriptPostRemoveFiles pipeExpectedEnd pipeReceivedEnd
+# pipeParentProcessID removeArrayItem removeArrayDuplicate SCRIPT_DARKEN_BOLD_TAG S_NO S_BO S_DA S_IT S_UN S_BL S_BA S_R_AL S_R_BO S_R_DA S_R_IT S_R_UN S_R_BL S_R_BA
+# S_R_CF S_R_CB S_BLA S_RED S_GRE S_YEL S_BLU S_MAG S_CYA S_LGY S_DGY S_LRE S_LGR S_LYE S_LBL S_LMA S_LCY S_WHI S_B_BLA S_B_RED S_B_GRE S_B_YEL S_B_BLU S_B_MAG S_B_CYA
+# S_B_LGY S_B_DGY S_B_LRE S_B_LGR S_B_LYE S_B_LBL S_B_LMA S_B_LCY S_B_WHI S_NOBLA S_NORED S_NOGRE S_NOYEL S_NOBLU S_NOMAG S_NOCYA S_NOLGY S_NODGY S_NOLRE S_NOLGR S_NOLYE
+# S_NOLBL S_NOLMA S_NOLCY S_NOWHI S_BOBLA S_BORED S_BOGRE S_BOYEL S_BOBLU S_BOMAG S_BOCYA S_BOLGY S_BODGY S_BOLRE S_BOLGR S_BOLYE S_BOLBL S_BOLMA S_BOLCY S_BOWHI
+# CO_HIDE CO_SHOW CO_SAVE_POS CO_RESTORE_POS ES_CURSOR_TO_SCREEN_END ES_CURSOR_TO_SCREEN_START ES_ENTIRE_SCREEN ES_CURSOR_TO_LINE_END ES_CURSOR_TO_LINE_START
+# ES_ENTIRE_LINE getCSIm getCSI_RGB getCSI_GRAY showRGB_Palette getCSI_CursorMove getCSI_ScreenMove A_IN_PROGRESS A_OK A_FAILED_R A_FAILED_Y A_SUCCESSED A_SKIPPED
+# A_ABORTED_NR A_ABORTED_RR A_ABORTED_NY A_WARNING_NR A_WARNING_RR A_WARNING_NY A_ERROR_NR A_ERROR_BR A_ERROR_RR A_UP_TO_DATE_G A_MODIFIED_Y A_UPDATED_Y A_UPDATED_G
+# A_ADDED_B A_COPIED_G A_MOVED_G A_REMOVED_R A_EXCLUDED_R A_BACKUPED_G A_EMPTY_TAG A_TAG_LENGTH_SIZE getActionTag errcho checkLoopFail checkLoopEnd getProcessTree safeExit
+# formatSizeV_Colors getFileTypeV checkFilename cloneFolderDetails clonePathDetails shortenFileNameV formatSizeV getFileSizeV checkLockfileOwned takeLockfile releaseLockfile
+# checkSectionStatus makeSectionStatusDone makeSectionStatusUncompleted ensureTTY ensureRoot getWordUserChoiceV getTimerV processTimeResultsV removeCSI_Tag getCSI_StringLength
+# CO_GO_TOP_LEFT CO_UP_1
+#
+################################################################################################################################################################
 
 function __change_log__
 {
 	: << 'COMMENT'
+
+	07.07.2019
+		Fix a bug in getCSI_StringLength function that crash with empty string (ie a string with only tags...).
+		Fix variable misspelled in shortenFileNameV function.
+		Fix variable misspelled in clonePathDetails function.
+		Fix bad exit status because of last condition in clonePathDetails and cloneFolderDetails functions.
+
+	01.07.2019
+		Add CO_UP_1 constant to move the cursor up by one line.
+
+	29.06.2019
+		Add removeCSI_Tag function to remove all CSI tags from a string.
+		Add getCSI_StringLength function to count all char from a string wothout counting CSI tags.
+		Fix : Allow getTimerV function to work without a return variable name.
+		Add CO_GO_TOP_LEFT constant to move the cursor at... top left ;) So, line 1, column 1.
+		Add a getTimerV_Format global variable to set a default format for getTimerV function.
+
+	27.06.2019
+		Add formatSizeV function.
+		Add SCRIPT_ENSURE_LOCKFILE constant and a automatic base lockfile creation.
+		Fix : Autorize makeSectionStatusDone and makeSectionStatusUncompled functions to overwrite a section file.
+		Make a list of all functions/constants to copy in other script for the autocompletion.
+
+	26.06.2019
+		Add ensureRoot function and some constants to ensure the script is executed as root if it need it.
+		Add getWordUserChoiceV function (transfered from getSelectableWord function in Make_Backup.sh).
+		Fix the variable name var_name to return_var_name in getProcessTree function.
+		Create a new source code section named "Criticals sections".
+		Add checkSectionStatus, makeSectionStatusDone and makeSectionStatusUncompleted function.
+		Add cloneFolderDetails, clonePathDetails, getTimerV and getFileSizeV function.
+		Fix : Use the new getTimerV function in the stderr management subshell.
+		Add shortenFileNameV function.
+
+	25.06.2019
+		Add SCRIPT_TTY constant that contain the current TTY or an empty string if no TTY.
+		Add ensureTTY function and some constants to open a konsole if no TTY anvailable and the script need one.
+		Fix : Change constant name SCRIPT_PATH to SCRIPT_FULLNAME.
+		Fix : Change constant name SCRIPT_REAL_PATH to SCRIPT_REAL_FULLNAME.
 
 	23.06.2019
 		Fix missing `local index` declaration in _showDebugDetails function.
