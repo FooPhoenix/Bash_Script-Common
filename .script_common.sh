@@ -12,7 +12,7 @@
 #	of others scripts.														   #
 #																			   #
 ################################################################################
-#														27.05.2019 - 07.07.2019
+#														27.05.2019 - 24.07.2019
 
 
 # Make Bash a bit more robust to bugs...
@@ -64,8 +64,9 @@ declare -r PATH_INFRASTRUCTURES="${PATH_INFRASTRUCTURES:-/media/foophoenix/AppKD
 
 # -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
-declare -r  PADDING_SPACE='                                                                                                                                                                                                                                                               '
-declare -r  PADDING_ZERO='00000000000000000000'
+declare -r  PADDING_SPACE="$(printf ' %.0s' {1..256})"
+declare -r  PADDING_ZERO="$(printf '0%.0s' {1..256})"
+declare -r  PADDING_EQUAL="$(printf '=%.0s' {1..256})"
 
 declare -ri ACTION_TAG_SIZE=12
 
@@ -98,6 +99,9 @@ declare -i pipeReceivedEnd=0
 declare -i pipeParentProcessID=$SCRIPT_PID
 
 # -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+
+declare -i  screenWidth=$(tput cols)
+declare -i  filenameMaxSize=80
 
 
 
@@ -478,6 +482,11 @@ function getCSI_ScreenMove
 
 # -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
+declare -r SO_INSERT_1="$(getCSI_ScreenMove Insert 1)"
+
+
+# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+
 function removeCSI_Tag
 {
 	sed -e "s|"$'\e'"\[?\?[0-9]*\(;[0-9]\+\)*[mlhsuJKHGABCDSTLM]||g" <<< "${*}"
@@ -547,6 +556,7 @@ declare -r A_MOVED_G="$(getActionTag 'MOVED' "$S_GRE")"
 declare -r A_REMOVED_R="$(getActionTag 'REMOVED' "$S_RED")"
 declare -r A_EXCLUDED_R="$(getActionTag 'EXCLUDED' "$S_RED")"
 declare -r A_BACKUPED_G="$(getActionTag 'BACKUPED' "$S_GRE")"
+declare -r A_BACKUPED_Y="$(getActionTag 'BACKUPED' "$S_YEL")"
 
 declare -r A_EMPTY_TAG="$(getActionTag '  ' "$S_NO")"
 declare -r A_TAG_LENGTH_SIZE="${PADDING_SPACE:0:$(( ACTION_TAG_SIZE + 2 ))}"
@@ -861,7 +871,7 @@ function _postExitProperly
 		cat "$temp_stderr_output_file" >&2
 
 	[[ -f "$SCRIPT_STDERR_FILE" ]] && (( $(wc -l < "$SCRIPT_STDERR_FILE") > 0 )) &&	{
-		echo -e "${S_NOWHI}While it was running, the script has ouptut this on the STDERR :${S_NO}"
+		echo -e "${S_NOWHI}While it was running, the script has ouptut this on the STDERR :${S_NO}"	# TODO : Add the script name if lunched with `script.sh &`
 		cat "$SCRIPT_STDERR_FILE"
 		echo
 	} >&2
@@ -894,9 +904,11 @@ function _postExitProperly
 
 function safeExit
 {
+	local -ir exit_status=${1:-0}
+
 	_preExitProperly
 	_postExitProperly
-	exit 0
+	exit $exit_status
 }
 
 function unexpectedExit
@@ -967,12 +979,12 @@ trap 'unexpectedExit "ERR"  "$LINENO" "$?" "$BASH_COMMAND"' ERR
 
 function getFileTypeV
 {
-	local -r return_var_name="${1}"
+	local -r return_var_name="${1}"			# TODO : :+ | ${VARIABLE:+default} | "default"  for all return_var_name ?
 	local -r file_name="${2}" # TODO : rename to filename
 
 	local    type exist link
 
-	[[ -L "$file_name" ]] && link='l' || link=' '
+	[[ -L "$file_name" ]] && link='l' || link=' '	# TODO : change the order : Exist - Type - Link, use +=
 	[[ -e "$file_name" ]] &&
 	{
 		exist='E'
@@ -1002,15 +1014,18 @@ function getFileTypeV
 
 function getFileSizeV()
 {
-	local -r return_var_name="${1}"
+	local    return_var_name="${1:-}"	# TODO : try to optimize with return_var_name="${1:-}${1:??-v $1}" ??
 	local full_filename="${2}"
 
-	printf -v $return_var_name '%d' "$(stat --format=%s "$full_filename" || echo 0)"
+	[[ -n "$return_var_name" ]] &&
+		return_var_name="-v $return_var_name"
+
+	printf $return_var_name '%d' "$(stat --format=%s "$full_filename" || echo 0)"
 }
 
 function formatSizeV
 {
-	local -r  return_var_name="${1}"
+	local     return_var_name="${1:-}"
 	local -ir input_size="${2}"
 	local -ir padding="${3:-0}"
 
@@ -1038,7 +1053,10 @@ function formatSizeV
 		done
 	}
 
-	printf -v $return_var_name "${S_NO}%s${S_R_AL}" "$final_size"
+	[[ -n "$return_var_name" ]] &&
+		return_var_name="-v $return_var_name"		# TODO : make a return_var_name value check with a pseudo bebug mode to notify if variable name is already a local variable name ??
+
+	printf $return_var_name "${S_NO}%s${S_R_AL}" "$final_size"
 }
 
 function checkFilename
@@ -1110,7 +1128,7 @@ function clonePathDetails
 
 function shortenFileNameV
 {
-	local -r  return_var_name="${1}"
+	local     return_var_name="${1:-}"
 	local     full_filename="${2}"
 	local -ir max_size="${3}"
 	local -ir max_filename_size="${4:-48}"
@@ -1149,7 +1167,10 @@ function shortenFileNameV
 		full_filename="${path}${filename_}"
 	}
 
-	printf -v $return_var_name '%s' "$full_filename"
+	[[ -n "$return_var_name" ]] &&
+		return_var_name="-v $return_var_name"
+
+	printf $return_var_name '%s' "$full_filename"
 }
 
 # -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
@@ -1609,13 +1630,31 @@ exec {stderr_pipe}<>"$SCRIPT_STDERR_PIPE" {stderr_backup}>&2 2>&${stderr_pipe}
 # A_ADDED_B A_COPIED_G A_MOVED_G A_REMOVED_R A_EXCLUDED_R A_BACKUPED_G A_EMPTY_TAG A_TAG_LENGTH_SIZE getActionTag errcho checkLoopFail checkLoopEnd getProcessTree safeExit
 # formatSizeV_Colors getFileTypeV checkFilename cloneFolderDetails clonePathDetails shortenFileNameV formatSizeV getFileSizeV checkLockfileOwned takeLockfile releaseLockfile
 # checkSectionStatus makeSectionStatusDone makeSectionStatusUncompleted ensureTTY ensureRoot getWordUserChoiceV getTimerV processTimeResultsV removeCSI_Tag getCSI_StringLength
-# CO_GO_TOP_LEFT CO_UP_1
+# CO_GO_TOP_LEFT CO_UP_1 PADDING_EQUAL A_BACKUPED_Y SO_INSERT_1 screenWidth filenameMaxSize
 #
 ################################################################################################################################################################
 
 function __change_log__
 {
 	: << 'COMMENT'
+
+	23.07.2019
+		Added SO_INSERT_1 constant.
+		Added screenWidth and filenameMaxSize variables.
+
+	22.07.2019
+		Added A_BACKUPED_Y constant.
+
+	21.07.2019
+		Fix : Now the shortenFileNameV funxtion can accept empty return_var_name.
+		Fix : Now the formatSizeV funxtion can accept empty return_var_name.
+		Fix : Now the getFileSizeV funxtion can accept empty return_var_name.
+
+	11.07.2019
+		Add PADDING_EQUAL constant, and uniformize PADDING_SPACE and PADDING_ZERO generation.
+
+	08.07.2019
+		Add the possibility to choose the exit status in safeExit function.
 
 	07.07.2019
 		Fix a bug in getCSI_StringLength function that crash with empty string (ie a string with only tags...).
