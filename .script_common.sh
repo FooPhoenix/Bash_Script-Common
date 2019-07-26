@@ -12,7 +12,7 @@
 #	of others scripts.														   #
 #																			   #
 ################################################################################
-#														27.05.2019 - 24.07.2019
+#														27.05.2019 - 26.07.2019
 
 
 # Make Bash a bit more robust to bugs...
@@ -135,7 +135,7 @@ function removeArrayItem
 			(( ai_remove_gaps > 0 )) && ${ai_array_name}=( "\${${ai_array_name}[@]}" )
 			:
 		SOURCE_CODE
-	} || :
+	} || :		# TODO finish with } && eval ... for more robust error handling ?
 
 	eval "$ai_source_code"
 }
@@ -167,7 +167,7 @@ function removeArrayDuplicate
 			(( ad_remove_gaps > 0 )) && ${ad_array_name}=( "\${${ad_array_name}[@]}" )
 			:
 		SOURCE_CODE
-	} || :
+	} || :		# TODO finish with } && eval ... for more robust error handling ?
 
 	eval "$ad_source_code"
 }
@@ -484,7 +484,6 @@ function getCSI_ScreenMove
 
 declare -r SO_INSERT_1="$(getCSI_ScreenMove Insert 1)"
 
-
 # -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
 function removeCSI_Tag
@@ -642,7 +641,7 @@ function checkLoopEnd
 
 function getProcessTree
 {
-	local -r  return_var_name="${1:-}"
+	local -r  return_var_name="${1:+-v $1}"
 	local -i  screen_size=${2:-$(( $( tput cols ) ))} # TODO : Debug, crash without tty...
 	local -i  pid ppid
 	local     command
@@ -790,17 +789,12 @@ function getProcessTree
 		esac
 
 		printf -v padded_pid '%5d' $pid
-		[[ -z "$return_var_name" ]] &&
-			echo -e "${output}${padded_pid} ${command}" ||
-			output="${output}${padded_pid} ${command}\n"
+		output="${output}${padded_pid} ${command}\n"
 
 #  		echo -e "${pid} ${command}"
 	done
 
-	[[ -n "$return_var_name" ]] &&
-		printf -v $return_var_name '%s' "$output"
-
-	return 0
+	printf $return_var_name '%b' "$output"
 }
 
 function _showExitHeader
@@ -871,7 +865,7 @@ function _postExitProperly
 		cat "$temp_stderr_output_file" >&2
 
 	[[ -f "$SCRIPT_STDERR_FILE" ]] && (( $(wc -l < "$SCRIPT_STDERR_FILE") > 0 )) &&	{
-		echo -e "${S_NOWHI}While it was running, the script has ouptut this on the STDERR :${S_NO}"	# TODO : Add the script name if lunched with `script.sh &`
+		echo -e "\n${S_NOWHI}While it was running, the script ${S_BOWHI}${SCRIPT_NAME}${S_NOWHI} has ouptut this on the STDERR :${S_NO}"
 		cat "$SCRIPT_STDERR_FILE"
 		echo
 	} >&2
@@ -979,53 +973,49 @@ trap 'unexpectedExit "ERR"  "$LINENO" "$?" "$BASH_COMMAND"' ERR
 
 function getFileTypeV
 {
-	local -r return_var_name="${1}"			# TODO : :+ | ${VARIABLE:+default} | "default"  for all return_var_name ?
-	local -r file_name="${2}" # TODO : rename to filename
+	local -r return_var_name="${1:+-v $1}"
+	local -r filename="${2}"
 
-	local    type exist link
+	local    result
 
-	[[ -L "$file_name" ]] && link='l' || link=' '	# TODO : change the order : Exist - Type - Link, use +=
-	[[ -e "$file_name" ]] &&
+	[[ -e "$filename" ]] &&
 	{
-		exist='E'
-		if [[ -f "$file_name" ]]; then
-			type='f'
-		elif [[ -d "$file_name" ]]; then
-			type='d'
-		elif [[ -p "$file_name" ]]; then
-			type='p'
-		elif [[ -S "$file_name" ]]; then
-			type='s'
-		elif [[ -b "$file_name" ]]; then
-			type='b'
-		elif [[ -c "$file_name" ]]; then
-			type='c'
+		if [[ -f "$filename" ]]; then
+			result='Ef'
+		elif [[ -d "$filename" ]]; then
+			result='Ed'
+		elif [[ -p "$filename" ]]; then
+			result='Ep'
+		elif [[ -S "$filename" ]]; then
+			result='Es'
+		elif [[ -b "$filename" ]]; then
+			result='Eb'
+		elif [[ -c "$filename" ]]; then
+			result='Ec'
 		else
-			type='?'
+			result='E?'
+			errcho "Function getFileTypeV has discovered an unknown type with file $filename"
 		fi
-	} ||
-	{
-		exist=' '
-		type=' '
-	}
+	} || result='  '
 
-	printf -v "$return_var_name" '%s%s%s' "$exist" "$link" "$type"
+	[[ -L "$filename" ]] &&
+		result+='l' ||
+		result+=' '
+
+	printf $return_var_name '%s' "$result"
 }
 
 function getFileSizeV()
 {
-	local    return_var_name="${1:-}"	# TODO : try to optimize with return_var_name="${1:-}${1:??-v $1}" ??
-	local full_filename="${2}"
-
-	[[ -n "$return_var_name" ]] &&
-		return_var_name="-v $return_var_name"
+	local -r return_var_name="${1:+-v $1}"
+	local -r full_filename="${2}"
 
 	printf $return_var_name '%d' "$(stat --format=%s "$full_filename" || echo 0)"
 }
 
 function formatSizeV
 {
-	local     return_var_name="${1:-}"
+	local -r  return_var_name="${1:+-v $1}"
 	local -ir input_size="${2}"
 	local -ir padding="${3:-0}"
 
@@ -1053,8 +1043,7 @@ function formatSizeV
 		done
 	}
 
-	[[ -n "$return_var_name" ]] &&
-		return_var_name="-v $return_var_name"		# TODO : make a return_var_name value check with a pseudo bebug mode to notify if variable name is already a local variable name ??
+	# TODO : make a return_var_name value check with a pseudo bebug mode to notify if variable name is already a local variable name ??
 
 	printf $return_var_name "${S_NO}%s${S_R_AL}" "$final_size"
 }
@@ -1128,7 +1117,7 @@ function clonePathDetails
 
 function shortenFileNameV
 {
-	local     return_var_name="${1:-}"
+	local -r  return_var_name="${1:+-v $1}"
 	local     full_filename="${2}"
 	local -ir max_size="${3}"
 	local -ir max_filename_size="${4:-48}"
@@ -1166,9 +1155,6 @@ function shortenFileNameV
 
 		full_filename="${path}${filename_}"
 	}
-
-	[[ -n "$return_var_name" ]] &&
-		return_var_name="-v $return_var_name"
 
 	printf $return_var_name '%s' "$full_filename"
 }
@@ -1379,7 +1365,7 @@ function ensureRoot
 
 function getWordUserChoiceV()
 {
-	local -r  return_var_name="${1}"; shift
+	local -r return_var_name="${1:+-v $1}"; shift
 
 	local -ar words=( ${*} )
 
@@ -1426,16 +1412,13 @@ function getWordUserChoiceV()
 		fi
 	done
 
-	printf -v $return_var_name '%d' $selected_word
+	printf $return_var_name '%d' $selected_word
 }
 
 function getTimerV()
 {
-	local    return_var_name="${1:-}"
+	local -r return_var_name="${1:+-v $1}"
 	local -r time_format="${2:-$getTimerV_Format}"
-
-	[[ -n "$return_var_name" ]] &&
-		return_var_name="-v $return_var_name"
 
 	TZ=UTC printf $return_var_name "%($time_format)T" $SECONDS
 }
@@ -1637,6 +1620,28 @@ exec {stderr_pipe}<>"$SCRIPT_STDERR_PIPE" {stderr_backup}>&2 2>&${stderr_pipe}
 function __change_log__
 {
 	: << 'COMMENT'
+
+# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+
+	RELATED COMMIT - 26.07.2019
+		Summary : Redesigned the return_var_name working way. Optimized the getFileTypeV function.
+
+		Details :	- Optimized and redesigned the getFileTypeV function. !! OUTPUT CHANGE !!
+					- Redesigned the return_var_name working way in all functions.
+					- Fix some little bugs.
+
+# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+
+	26.07.2019
+		Since now the change log format will change a bit with new commit details.
+
+	24.07.2019
+		Fix : In _postExitProperly function, added the script name to the stderr title.
+		Fix : in getFileTypeV function, changed the file_name variable to filename.
+		Fix : in getFileTypeV function, let a chance to debug unknown type with an errcho.
+		Fix : In _postExitProperly function, added a new line before the stderr title to make it start at the line beginning.
+		Fix : Optimized the getFileTypeV function and changed the details order to simplify some basic types recognition.
+		Fix : Changing the return_var_name default value to prepend automatically -v if the var name is not empty. (in the whole source code !)
 
 	23.07.2019
 		Added SO_INSERT_1 constant.
