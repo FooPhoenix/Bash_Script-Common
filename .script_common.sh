@@ -12,7 +12,7 @@
 #	of others scripts.														   #
 #																			   #
 ################################################################################
-#														27.05.2019 - 26.07.2019
+#														27.05.2019 - 30.07.2019
 
 
 # Make Bash a bit more robust to bugs...
@@ -1005,7 +1005,7 @@ function getFileTypeV
 	printf $return_var_name '%s' "$result"
 }
 
-function getFileSizeV()
+function getFileSizeV
 {
 	local -r return_var_name="${1:+-v $1}"
 	local -r full_filename="${2}"
@@ -1363,7 +1363,7 @@ function ensureRoot
 	}
 }
 
-function getWordUserChoiceV()
+function getWordUserChoiceV
 {
 	local -r return_var_name="${1:+-v $1}"; shift
 
@@ -1415,12 +1415,21 @@ function getWordUserChoiceV()
 	printf $return_var_name '%d' $selected_word
 }
 
-function getTimerV()
+# Local static variables :
+declare -i _getTimerV_lastSecond=-1
+declare    _getTimerV_lastResult=''
+function getTimerV
 {
 	local -r return_var_name="${1:+-v $1}"
-	local -r time_format="${2:-$getTimerV_Format}"
 
-	TZ=UTC printf $return_var_name "%($time_format)T" $SECONDS
+	(( _getTimerV_lastSecond != SECONDS )) && {
+		local -r time_format="${2:-$getTimerV_Format}"
+
+		TZ=UTC printf -v _getTimerV_lastResult "%($time_format)T" $SECONDS
+		_getTimerV_lastSecond=$SECONDS
+	}
+
+	printf $return_var_name '%s' "$_getTimerV_lastResult"
 }
 
 declare -rf ensureTTY ensureRoot getWordUserChoiceV getTimerV
@@ -1620,6 +1629,21 @@ exec {stderr_pipe}<>"$SCRIPT_STDERR_PIPE" {stderr_backup}>&2 2>&${stderr_pipe}
 function __change_log__
 {
 	: << 'COMMENT'
+
+# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+
+	RELATED COMMIT - 30.07.2019
+		Summary : Huge performance optimization.
+
+		Details :	- Huge performance optimization in getTimerV function.
+
+# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+
+	28.07.2019
+		getTimerV function
+			- Added two local static variables.
+			- Put result in cache and use cache if no difference.
+			- Huge performance optimization, but known issue now is time format can't change between cache update !
 
 # -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
