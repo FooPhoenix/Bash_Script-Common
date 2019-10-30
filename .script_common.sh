@@ -12,7 +12,7 @@
 #	of others scripts.														   #
 #																			   #
 ################################################################################
-#														27.05.2019 - 30.07.2019
+#														27.05.2019 - 30.10.2019
 
 
 # Make Bash a bit more robust to bugs...
@@ -172,9 +172,70 @@ function removeArrayDuplicate
 	eval "$ad_source_code"
 }
 
+function qsort		# https://stackoverflow.com/questions/7442417/how-to-sort-an-array-in-bash
+{
+	local    pivot item
+	local -a smaller=( )
+	local -a larger=( )
+
+	qsort__return=( )
+
+	(( $# == 0 )) && return 0
+
+	pivot="$1"; shift
+
+	for item; do
+		if [[ "$item" < "$pivot" ]]; then
+			smaller+=( "$item" )
+		else
+			larger+=( "$item" )
+		fi
+	done
+
+	qsort "${smaller[@]}"
+	smaller=( "${qsort__return[@]}" )
+
+	qsort "${larger[@]}"
+	larger=( "${qsort__return[@]}" )	# TODO: Useless assign ??
+
+	qsort__return=( "${smaller[@]}" "$pivot" "${larger[@]}" )
+}
+
+function qsortEx		# https://stackoverflow.com/questions/7442417/how-to-sort-an-array-in-bash
+{
+	local -a stack=( 0 $(( $# - 1 )) )
+	local    beg end index pivot
+	local -a smaller=( )
+	local -a larger=( )
+
+	qsortEx__return=("$@")
+
+	while (( ${#stack[@]} )); do
+		beg=${stack[0]}
+		end=${stack[1]}
+
+		stack=( "${stack[@]:2}" )
+
+		smaller=() larger=()
+		pivot="${qsortEx__return[beg]}"
+		for (( index = beg + 1; index <= end; ++index )); do
+			if [[ "${qsortEx__return[index]}" < "$pivot" ]]; then
+				smaller+=( "${qsortEx__return[index]}" )
+			else
+				larger+=( "${qsortEx__return[index]}" )
+			fi
+		done
+
+		qsortEx__return=( "${qsortEx__return[@]:0:beg}" "${smaller[@]}" "$pivot" "${larger[@]}" "${qsortEx__return[@]:end+1}" )
+
+		(( ${#smaller[@]} >= 2 )) && stack+=( $beg $(( beg + ${#smaller[@]} - 1 )) )
+		(( ${#larger[@]} >= 2 )) &&  stack+=( $(( end - ${#larger[@]} + 1 )) $end )
+	done
+}
+
 # -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
-declare -rf removeArrayItem removeArrayDuplicate
+declare -rf removeArrayItem removeArrayDuplicate qsort qsortEx
 
 
 
@@ -896,7 +957,7 @@ function _postExitProperly
 	} &
 }
 
-function safeExit
+function safeExit		# TODO : change it by `exit [safe|error] [#]
 {
 	local -ir exit_status=${1:-0}
 
@@ -978,7 +1039,7 @@ function getFileTypeV
 
 	local    result
 
-	[[ -e "$filename" ]] &&
+	[[ -e "$filename" ]] &&		# TODO Remove the useless E...
 	{
 		if [[ -f "$filename" ]]; then
 			result='Ef'
@@ -1010,7 +1071,7 @@ function getFileSizeV
 	local -r return_var_name="${1:+-v $1}"
 	local -r full_filename="${2}"
 
-	printf $return_var_name '%d' "$(stat --format=%s "$full_filename" || echo 0)"
+	printf $return_var_name '%d' "$(stat -c '%s' "$full_filename" || echo 0)"
 }
 
 function formatSizeV
@@ -1622,13 +1683,26 @@ exec {stderr_pipe}<>"$SCRIPT_STDERR_PIPE" {stderr_backup}>&2 2>&${stderr_pipe}
 # A_ADDED_B A_COPIED_G A_MOVED_G A_REMOVED_R A_EXCLUDED_R A_BACKUPED_G A_EMPTY_TAG A_TAG_LENGTH_SIZE getActionTag errcho checkLoopFail checkLoopEnd getProcessTree safeExit
 # formatSizeV_Colors getFileTypeV checkFilename cloneFolderDetails clonePathDetails shortenFileNameV formatSizeV getFileSizeV checkLockfileOwned takeLockfile releaseLockfile
 # checkSectionStatus makeSectionStatusDone makeSectionStatusUncompleted ensureTTY ensureRoot getWordUserChoiceV getTimerV processTimeResultsV removeCSI_Tag getCSI_StringLength
-# CO_GO_TOP_LEFT CO_UP_1 PADDING_EQUAL A_BACKUPED_Y SO_INSERT_1 screenWidth filenameMaxSize
+# CO_GO_TOP_LEFT CO_UP_1 PADDING_EQUAL A_BACKUPED_Y SO_INSERT_1 screenWidth filenameMaxSize qsort qsortEx
 #
 ################################################################################################################################################################
 
 function __change_log__
 {
 	: << 'COMMENT'
+
+# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+
+	RELATED COMMIT - 30.10.2019
+		Summary : Added the qsort and qsortEx function.
+
+		Details :	- Added the qsort and qsortEx function.
+
+# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+
+	18.10.2019
+		Main Source Code
+			- Added the qsort and qsortEx function.
 
 # -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
