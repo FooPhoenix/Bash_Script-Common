@@ -1,1 +1,0 @@
-# Bash_Script-Common
